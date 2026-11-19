@@ -1,0 +1,26 @@
+{
+  "name": "posematch",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PoseMatch AI pose assistant built with native ES modules",
+  "scripts": {
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\" \"styles/**/*.css\" \"index.html\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\" \"styles/**/*.css\" \"index.html\"",
+    "lint": "eslint src tests",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "deadcode": "knip",
+    "audit": "npm audit --audit-level=high",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run deadcode"
+  },
+  "devDependencies": {
+    "@mediapipe/tasks-vision": "0.10.14",
+    "eslint": "^9.18.0",
+    "globals": "^15.14.0",
+    "knip": "^5.43.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  }
+}

@@ -1,0 +1,36 @@
+# ARCHITECTURE.md — Карта проекта PoseMatch
+
+- `index.html` — точка входа, `<script type="importmap">` для `@mediapipe/tasks-vision`, 4-экранный Mobile-First каркас.
+- `package.json` — зависимости разработки, `@mediapipe/tasks-vision` (типы) и конвейер `npm run verify`.
+- `tsconfig.json` — проверка JSDoc-типов через `tsc --noEmit --allowJs --checkJs`.
+- `eslint.config.js` — правила линтинга для браузерных ES-модулей и тестов Vitest.
+- `vitest.config.js` — конфигурация юнит-тестов `tests/**/*.test.js`.
+- `knip.json` — поиск мертвого кода и неиспользуемых экспортов.
+- `.prettierrc` — правила форматирования кода.
+- `.geminiignore` — список игнорируемых директорий и артефактов.
+- `GEMINI.md` — конституция проекта, стек и инженерные ограничения.
+- `SPEC.md` — требования 4 экранов, жесткие контракты данных и Edge Cases.
+- `STATE.md` — текущий этап пайплайна, статус задач и бэклог.
+- `styles/tokens.css` — CSS-переменные цветов, радиусов, шрифтов и размеров.
+- `styles/layout.css` — Mobile-First разметка (`max-width: 480px`), компоненты и стили 4 экранов.
+- `src/main.js` — инициализация состояния, сервисов, роутера и запуск контроллера камеры.
+- `src/core/types.js` — централизованные JSDoc `@typedef` контракты из `SPEC.md`.
+- `src/core/constants.js` — константы MediaPipe, суставов, костей, порогов и таймингов.
+- `src/core/poseMath.js` — чистая математика углов, координат, отзеркаливания и базовых скелетов.
+- `src/core/poseEvaluator.js` — оценка совпадения позы по углам сегментов и генерация подсказок.
+- `src/core/poseAlignment.js` — расчет целевого скелета на экране (режим «К телу» и сглаживание).
+- `src/core/presetData.js` — данные и позы встроенных пресетов с категориями фильтрации.
+- `src/core/presetRenderer.js` — генерация PNG Data URL превью для встроенных пресетов.
+- `src/services/mediapipeService.js` — загрузка и вызов MediaPipe PoseLandmarker (GPU/CPU fallback).
+- `src/services/cameraService.js` — доступ к камерам, переключение устройств и захват чистого JPEG кадра.
+- `src/services/audioVoiceService.js` — Web Audio «Парктроник», звук затвора и русские голосовые подсказки.
+- `src/services/storageService.js` — чтение/запись пользовательских калибровок и настроек в `localStorage`.
+- `src/state/store.js` — реактивный Store состояния `AppState` и экшены переходов.
+- `src/ui/router.js` — переключение видимости 4 экранов и жизненный цикл активного экрана.
+- `src/ui/cameraController.js` — цикл анализа кадров, автоспуск (800 ms) и 3-секундная запись позы.
+- `src/ui/overlayRenderer.js` — отрисовка скелета эталона, пользователя и холста калибровки на `<canvas>`.
+- `src/ui/screens/hubScreen.js` — Экран 1: хаб пресетов, загрузка фото, фильтры, калибровки, запись 3 сек.
+- `src/ui/screens/calibrationScreen.js` — Экран 2: интерактивная калибровка суставов на `<canvas>`.
+- `src/ui/screens/cameraScreen.js` — Экран 3: видоискатель, автоспуск 800 ms, настройки 2x2 и 3-сек запись.
+- `src/ui/screens/galleryScreen.js` — Экран 4: сравнение Side-by-Side, лента дублей и скачивание фото.
+- `tests/poseMath.test.js` — юнит-тесты на математику углов, отзеркаливание, выравнивание и Edge Cases.
