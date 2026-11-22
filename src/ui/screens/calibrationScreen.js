@@ -65,7 +65,7 @@ export function createCalibrationScreen(root) {
    * @param {"error" | "info" | "success"} [tone]
    */
   function showNotice(text, tone = "error") {
-    noticeEl.className = `calib-notice calib-notice--${tone}`;
+    noticeEl.className = `app-notice app-notice--${tone}`;
     noticeText.textContent = text;
     noticeEl.hidden = false;
   }

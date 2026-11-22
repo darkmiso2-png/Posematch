@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0d12" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -30,7 +30,7 @@
   </head>
   <body>
     <main class="app-shell">
-      <header class="topbar" style="padding: 12px 14px 0">
+      <header class="topbar">
         <div class="brand-pill">PoseMatch</div>
         <div class="status-pill">
           <span class="dot" id="mp-status-dot"></span>
@@ -44,11 +44,11 @@
           <span class="hub-nav-title">Библиотека поз</span>
         </div>
 
-        <div id="hub-notice" class="hub-notice" role="status" aria-live="polite" hidden>
-          <span id="hub-notice-text" class="hub-notice-text"></span>
+        <div id="hub-notice" class="app-notice" role="status" aria-live="polite" hidden>
+          <span id="hub-notice-text" class="app-notice-text"></span>
           <button
             id="hub-notice-close"
-            class="hub-notice-close"
+            class="app-notice-close"
             type="button"
             aria-label="Закрыть уведомление"
           >
@@ -109,11 +109,11 @@
       </section>
 
       <section id="screen-calibration" class="screen" hidden>
-        <div id="calib-notice" class="calib-notice" role="status" aria-live="polite" hidden>
-          <span id="calib-notice-text" class="calib-notice-text"></span>
+        <div id="calib-notice" class="app-notice" role="status" aria-live="polite" hidden>
+          <span id="calib-notice-text" class="app-notice-text"></span>
           <button
             id="calib-notice-close"
-            class="calib-notice-close"
+            class="app-notice-close"
             type="button"
             aria-label="Закрыть уведомление"
           >
@@ -157,11 +157,11 @@
       </section>
 
       <section id="screen-camera" class="screen active">
-        <div id="cam-notice" class="cam-notice" role="status" aria-live="polite" hidden>
-          <span id="cam-notice-text" class="cam-notice-text"></span>
+        <div id="cam-notice" class="app-notice" role="status" aria-live="polite" hidden>
+          <span id="cam-notice-text" class="app-notice-text"></span>
           <button
             id="cam-notice-close"
-            class="cam-notice-close"
+            class="app-notice-close"
             type="button"
             aria-label="Закрыть уведомление"
           >
@@ -274,11 +274,11 @@
           <button id="gal-btn-hub" class="btn" type="button">Позы</button>
         </div>
 
-        <div id="gal-notice" class="gal-notice" role="status" aria-live="polite" hidden>
-          <span id="gal-notice-text" class="gal-notice-text"></span>
+        <div id="gal-notice" class="app-notice" role="status" aria-live="polite" hidden>
+          <span id="gal-notice-text" class="app-notice-text"></span>
           <button
             id="gal-notice-close"
-            class="gal-notice-close"
+            class="app-notice-close"
             type="button"
             aria-label="Закрыть уведомление"
           >

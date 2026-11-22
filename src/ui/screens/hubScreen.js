@@ -50,7 +50,7 @@ export function createHubScreen(root, actions) {
    * @param {"error" | "info" | "success"} [tone]
    */
   function showNotice(text, tone = "error") {
-    noticeEl.className = `hub-notice hub-notice--${tone}`;
+    noticeEl.className = `app-notice app-notice--${tone}`;
     noticeText.textContent = text;
     noticeEl.hidden = false;
   }

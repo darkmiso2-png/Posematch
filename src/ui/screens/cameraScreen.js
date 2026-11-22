@@ -81,7 +81,7 @@ export function createCameraScreen(root, actions) {
    * @param {"info" | "error"} [tone]
    */
   function showNotice(text, tone = "info") {
-    noticeEl.className = `cam-notice${tone === "error" ? " cam-notice--error" : ""}`;
+    noticeEl.className = `app-notice app-notice--${tone}`;
     noticeText.textContent = text;
     noticeEl.hidden = false;
   }

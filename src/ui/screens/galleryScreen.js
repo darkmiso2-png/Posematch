@@ -69,7 +69,7 @@ export function createGalleryScreen(root) {
    * @param {"info" | "error"} [tone]
    */
   function showNotice(text, tone = "info") {
-    noticeEl.className = `gal-notice${tone === "error" ? " gal-notice--error" : ""}`;
+    noticeEl.className = `app-notice app-notice--${tone}`;
     noticeText.textContent = text;
     noticeEl.hidden = false;
   }
