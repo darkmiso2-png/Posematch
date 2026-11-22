@@ -4,7 +4,8 @@ import {
   loadSavedCalibrations,
   loadSettings,
   saveCalibrationsList,
-  saveSettings
+  saveSettings,
+  validateCalibrationName
 } from "../services/storageService.js";
 
 /** @type {Set<(state: import("../core/types.js").AppState) => void>} */
@@ -125,9 +126,15 @@ export function commitCalibrationDraft(confirmedRef, saveToLibrary = false) {
       source: /** @type {const} */ ("custom")
     };
     const idx = state.savedCalibrations.findIndex((c) => c.id === customCopy.id);
-    if (idx >= 0) state.savedCalibrations[idx] = customCopy;
-    else state.savedCalibrations = [customCopy, ...state.savedCalibrations];
-    savedOk = saveCalibrationsList(state.savedCalibrations);
+    const nextSaved =
+      idx >= 0
+        ? state.savedCalibrations.map((c, i) => (i === idx ? customCopy : c))
+        : [customCopy, ...state.savedCalibrations];
+    const res = saveCalibrationsList(nextSaved);
+    savedOk = res.ok;
+    if (res.ok) {
+      state.savedCalibrations = nextSaved;
+    }
   }
 
   state.currentScreen = "camera";
@@ -136,13 +143,79 @@ export function commitCalibrationDraft(confirmedRef, saveToLibrary = false) {
 }
 
 /**
+ * Удаление сохраненной калибровки с синхронизацией в localStorage.
+ * Если удаляется текущий activeReference, переключает его на первый доступный пресет.
  * @param {string} id
- * @returns {void}
+ * @returns {{ ok: true } | { ok: false, error: string }}
  */
 export function deleteSavedCalibration(id) {
-  state.savedCalibrations = state.savedCalibrations.filter((c) => c.id !== id);
-  saveCalibrationsList(state.savedCalibrations);
+  const nextSaved = state.savedCalibrations.filter((c) => c.id !== id);
+  if (nextSaved.length === state.savedCalibrations.length) {
+    return { ok: true };
+  }
+
+  const res = saveCalibrationsList(nextSaved);
+  if (!res.ok) {
+    return { ok: false, error: res.error };
+  }
+
+  state.savedCalibrations = nextSaved;
+
+  if (state.activeReference?.id === id) {
+    const fallback = state.presets[0] || null;
+    state.activeReference = fallback
+      ? {
+          ...fallback,
+          landmarks: cloneLandmarks(fallback.landmarks),
+          autoLandmarks: cloneLandmarks(fallback.autoLandmarks)
+        }
+      : null;
+    state.runtime.holdMs = 0;
+  }
+
   notify();
+  return { ok: true };
+}
+
+/**
+ * Переименование сохраненной калибровки с валидацией и синхронизацией в localStorage.
+ * @param {string} id
+ * @param {string} rawName
+ * @returns {{ ok: true, name: string } | { ok: false, error: string }}
+ */
+export function renameSavedCalibration(id, rawName) {
+  const validation = validateCalibrationName(rawName);
+  if (!validation.ok) {
+    return { ok: false, error: validation.error };
+  }
+
+  const existing = state.savedCalibrations.find((c) => c.id === id);
+  if (!existing) {
+    return { ok: false, error: "Калибровка не найдена." };
+  }
+
+  if (existing.name === validation.name) {
+    return { ok: true, name: validation.name };
+  }
+
+  const nextSaved = state.savedCalibrations.map((c) =>
+    c.id === id ? { ...c, name: validation.name } : c
+  );
+  const res = saveCalibrationsList(nextSaved);
+  if (!res.ok) {
+    return { ok: false, error: res.error };
+  }
+
+  state.savedCalibrations = nextSaved;
+  if (state.activeReference?.id === id) {
+    state.activeReference = {
+      ...state.activeReference,
+      name: validation.name
+    };
+  }
+
+  notify();
+  return { ok: true, name: validation.name };
 }
 
 /**

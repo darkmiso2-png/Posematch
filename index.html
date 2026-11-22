@@ -6,6 +6,8 @@
     <title>PoseMatch</title>
     <link rel="stylesheet" href="./styles/tokens.css" />
     <link rel="stylesheet" href="./styles/layout.css" />
+    <link rel="stylesheet" href="./styles/hub.css" />
+    <link rel="stylesheet" href="./styles/hubCards.css" />
     <script type="importmap">
       {
         "imports": {
@@ -25,7 +27,29 @@
       </header>
 
       <section id="screen-hub" class="screen active">
-        <div class="card">
+        <div id="hub-notice" class="hub-notice" role="status" aria-live="polite" hidden>
+          <span id="hub-notice-text" class="hub-notice-text"></span>
+          <button
+            id="hub-notice-close"
+            class="hub-notice-close"
+            type="button"
+            aria-label="Закрыть уведомление"
+          >
+            ×
+          </button>
+        </div>
+
+        <div id="hub-dropzone" class="hub-dropzone" tabindex="0">
+          <div class="hub-dropzone-head">
+            <span class="hub-dropzone-title">Референс позы</span>
+            <span class="hub-dropzone-sub">
+              Выберите фото, перетащите его сюда или вставьте через Ctrl+V
+            </span>
+          </div>
+          <div id="hub-upload-status" class="hub-upload-status" hidden>
+            <span class="hub-spinner" aria-hidden="true"></span>
+            <span id="hub-upload-status-text">Анализ позы на фото...</span>
+          </div>
           <div class="row-2">
             <button id="hub-btn-upload" class="btn btn-primary" type="button">
               Загрузить фото
@@ -33,21 +57,37 @@
             <button id="hub-btn-record" class="btn" type="button">Запись позы 3с</button>
           </div>
           <input id="hub-file-input" type="file" accept="image/*" hidden />
+        </div>
+
+        <div class="card hub-actions-card">
+          <div id="hub-active-summary" class="hub-active-ref">
+            <img id="hub-active-thumb" class="hub-active-thumb" alt="Активный эталон" />
+            <div class="hub-active-info">
+              <span class="hub-active-label">Активный эталон</span>
+              <strong id="hub-active-name" class="hub-active-name">Не выбран</strong>
+            </div>
+            <span id="hub-active-badge" class="hub-source-pill">Пресет</span>
+          </div>
           <div class="row-2">
-            <button id="hub-btn-shoot" class="btn btn-primary" type="button">К съемке</button>
+            <button id="hub-btn-shoot" class="btn btn-shoot" type="button">К съемке</button>
             <button id="hub-btn-calib" class="btn" type="button">Калибровка</button>
           </div>
-          <button id="hub-btn-gallery" class="btn" type="button">
-            Галерея (<span id="hub-gallery-count">0</span>)
+          <button id="hub-btn-gallery" class="btn hub-btn-gallery" type="button">
+            <span>Галерея дублей</span>
+            <span id="hub-gallery-count" class="hub-count-badge">0</span>
           </button>
         </div>
-        <div class="filter-row" id="hub-filter-row">
-          <button class="btn" data-filter="all" type="button">Все</button>
-          <button class="btn" data-filter="portrait" type="button">Портрет</button>
-          <button class="btn" data-filter="fullbody" type="button">Рост</button>
-          <button class="btn" data-filter="dynamic" type="button">Динамика</button>
-          <button class="btn" data-filter="saved" type="button">Мои</button>
+
+        <div class="filter-row hub-filter-row" id="hub-filter-row">
+          <button class="btn hub-filter-btn" data-filter="all" type="button">Все</button>
+          <button class="btn hub-filter-btn" data-filter="portrait" type="button">Портрет</button>
+          <button class="btn hub-filter-btn" data-filter="fullbody" type="button">Рост</button>
+          <button class="btn hub-filter-btn" data-filter="dynamic" type="button">Динамика</button>
+          <button class="btn hub-filter-btn" data-filter="saved" type="button">
+            Мои <span id="hub-saved-count" class="hub-filter-count">0</span>
+          </button>
         </div>
+
         <div id="hub-preset-grid" class="preset-grid"></div>
       </section>
 

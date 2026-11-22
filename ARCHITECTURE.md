@@ -13,6 +13,8 @@
 - `STATE.md` — текущий этап пайплайна, статус задач и бэклог.
 - `styles/tokens.css` — CSS-переменные цветов, радиусов, шрифтов и размеров.
 - `styles/layout.css` — Mobile-First разметка (`max-width: 480px`), компоненты и стили 4 экранов.
+- `styles/hub.css` — стили Экрана 1: dropzone загрузки, баннер уведомлений, фильтры и панель активного эталона.
+- `styles/hubCards.css` — стили сетки карточек Экрана 1, inline-переименования и Empty State.
 - `src/main.js` — инициализация состояния, сервисов, роутера и запуск контроллера камеры.
 - `src/core/types.js` — централизованные JSDoc `@typedef` контракты из `SPEC.md`.
 - `src/core/constants.js` — константы MediaPipe, суставов, костей, порогов и таймингов.
@@ -29,8 +31,11 @@
 - `src/ui/router.js` — переключение видимости 4 экранов и жизненный цикл активного экрана.
 - `src/ui/cameraController.js` — цикл анализа кадров, автоспуск (800 ms) и 3-секундная запись позы.
 - `src/ui/overlayRenderer.js` — отрисовка скелета эталона, пользователя и холста калибровки на `<canvas>`.
-- `src/ui/screens/hubScreen.js` — Экран 1: хаб пресетов, загрузка фото, фильтры, калибровки, запись 3 сек.
+- `src/ui/screens/hubScreen.js` — Экран 1: хаб пресетов, активный эталон, фильтры, быстрые действия и уведомления.
+- `src/ui/screens/hubCards.js` — Экран 1: безопасный DOM-рендер карточек, inline-переименования и Empty State.
+- `src/ui/screens/hubUpload.js` — Экран 1: загрузка фото (кнопка, Drag & Drop, Ctrl+V) с блокировкой и валидацией.
 - `src/ui/screens/calibrationScreen.js` — Экран 2: интерактивная калибровка суставов на `<canvas>`.
 - `src/ui/screens/cameraScreen.js` — Экран 3: видоискатель, автоспуск 800 ms, настройки 2x2 и 3-сек запись.
 - `src/ui/screens/galleryScreen.js` — Экран 4: сравнение Side-by-Side, лента дублей и скачивание фото.
 - `tests/poseMath.test.js` — юнит-тесты на математику углов, отзеркаливание, выравнивание и Edge Cases.
+- `tests/hubFeature.test.js` — юнит-тесты валидации имени калибровок, квоты `localStorage` и экшенов Store.

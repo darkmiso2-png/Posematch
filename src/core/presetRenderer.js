@@ -7,6 +7,7 @@ import { PRESET_DEFINITIONS } from "./presetData.js";
  * @returns {string}
  */
 function renderPresetDataUrl(preset) {
+  if (typeof document === "undefined") return "";
   const c = document.createElement("canvas");
   c.width = 480;
   c.height = 640;
