@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="./styles/hubCards.css" />
     <link rel="stylesheet" href="./styles/calibration.css" />
     <link rel="stylesheet" href="./styles/camera.css" />
+    <link rel="stylesheet" href="./styles/gallery.css" />
     <script type="importmap">
       {
         "imports": {
@@ -258,24 +259,77 @@
       </section>
 
       <section id="screen-gallery" class="screen" hidden>
-        <div class="topbar">
-          <button id="gal-btn-camera" class="btn" type="button">К съемке</button>
-          <span id="gal-shot-score" class="status-pill">Пока нет снимков</span>
-          <button id="gal-btn-hub" class="btn" type="button">Хаб</button>
+        <div class="gal-nav-head">
+          <button id="gal-btn-camera" class="btn" type="button">← К камере</button>
+          <span class="gal-nav-title">Галерея дублей</span>
+          <button id="gal-btn-hub" class="btn" type="button">Позы</button>
         </div>
-        <div class="side-by-side">
-          <div class="compare-pane">
-            <span class="muted-note">Эталон</span><canvas id="gal-ref-canvas"></canvas>
+
+        <div id="gal-notice" class="gal-notice" role="status" aria-live="polite" hidden>
+          <span id="gal-notice-text" class="gal-notice-text"></span>
+          <button
+            id="gal-notice-close"
+            class="gal-notice-close"
+            type="button"
+            aria-label="Закрыть уведомление"
+          >
+            ×
+          </button>
+        </div>
+
+        <div id="gal-content">
+          <div class="gal-meta-card">
+            <div class="gal-meta-main">
+              <strong id="gal-meta-pose" class="gal-meta-pose">Эталон</strong>
+              <span id="gal-meta-sub" class="gal-meta-sub">Дубль 1 из 1 • --:--</span>
+            </div>
+            <span id="gal-shot-score" class="gal-score-badge">0%</span>
           </div>
-          <div class="compare-pane">
-            <span class="muted-note">Ваше фото</span><canvas id="gal-shot-canvas"></canvas>
+
+          <div class="side-by-side" style="margin-top: 10px">
+            <div class="compare-pane">
+              <div class="gal-pane-head">
+                <span class="muted-note">Эталон</span>
+                <span id="gal-ref-note" class="gal-pane-note"></span>
+              </div>
+              <canvas id="gal-ref-canvas"></canvas>
+            </div>
+            <div class="compare-pane">
+              <div class="gal-pane-head">
+                <span class="muted-note">Ваше фото</span>
+                <span id="gal-shot-note" class="gal-pane-note"></span>
+              </div>
+              <canvas id="gal-shot-canvas"></canvas>
+            </div>
+          </div>
+
+          <div class="gal-actions-grid" style="margin-top: 10px">
+            <button id="gal-toggle-skel" class="btn" type="button" aria-pressed="true">
+              Скелет поверх фото
+            </button>
+            <button id="gal-btn-download" class="btn btn-primary" type="button">Скачать JPG</button>
+            <button id="gal-btn-delete" class="btn gal-btn-delete" type="button">
+              Удалить дубль
+            </button>
+          </div>
+
+          <div class="gal-strip-section" style="margin-top: 10px">
+            <div class="gal-strip-head">
+              <span>Лента дублей сессии</span>
+              <span id="gal-strip-count">0</span>
+            </div>
+            <div id="gal-strip" class="shots-strip"></div>
           </div>
         </div>
-        <div class="row-2">
-          <button id="gal-toggle-skel" class="btn" type="button">Скелет поверх</button>
-          <button id="gal-btn-download" class="btn btn-primary" type="button">Скачать JPG</button>
+
+        <div id="gal-empty" class="gal-empty-state" hidden>
+          <strong class="gal-empty-title">В этой сессии пока нет снимков</strong>
+          <p class="gal-empty-desc">
+            Сделайте фото по эталону вручную или через автоспуск — дубли появятся здесь для
+            сравнения Side-by-Side.
+          </p>
+          <button id="gal-empty-camera" class="btn btn-primary" type="button">← К камере</button>
         </div>
-        <div id="gal-strip" class="shots-strip"></div>
       </section>
     </main>
     <script type="module" src="./src/main.js"></script>

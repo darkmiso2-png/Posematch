@@ -42,7 +42,8 @@ const routeToScreen = createScreenRouter(screens, {
     camera: () => camController?.activate()
   },
   onLeave: {
-    camera: () => camController?.deactivate()
+    camera: () => camController?.deactivate(),
+    gallery: () => galleryView.clearNotice()
   }
 });
 

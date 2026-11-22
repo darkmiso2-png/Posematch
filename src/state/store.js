@@ -1,16 +1,12 @@
-import { resolveInitialReference } from "../core/cameraHudLogic.js";
 import { validateCalibrationSkeleton } from "../core/calibrationLogic.js";
-import { cloneLandmarks } from "../core/poseMath.js";
-import { buildInitialPresets } from "../core/presetRenderer.js";
+import { removeShotAndResolveSelection, resolveSelectedShot } from "../core/galleryLogic.js";
 import {
-  loadLastActiveReferenceId,
-  loadSavedCalibrations,
-  loadSettings,
   saveCalibrationsList,
   saveLastActiveReferenceId,
   saveSettings,
   validateCalibrationName
 } from "../services/storageService.js";
+import { buildCommittedCalibration, cloneReference, createInitialState } from "./storeHelpers.js";
 
 /** @type {Set<(state: import("../core/types.js").AppState) => void>} */
 const listeners = new Set();
@@ -18,48 +14,8 @@ const listeners = new Set();
 /** @type {import("../core/types.js").ScreenId} */
 let calibrationReturnScreen = "camera";
 
-/**
- * @param {import("../core/types.js").PoseReference | null} ref
- * @returns {import("../core/types.js").PoseReference | null}
- */
-function cloneReference(ref) {
-  if (!ref) return null;
-  return {
-    ...ref,
-    landmarks: cloneLandmarks(ref.landmarks),
-    autoLandmarks: cloneLandmarks(ref.autoLandmarks)
-  };
-}
-
-const presets = buildInitialPresets();
-const savedCalibrations = loadSavedCalibrations();
-const initialActiveRef = cloneReference(
-  resolveInitialReference(presets, savedCalibrations, loadLastActiveReferenceId())
-);
-
 /** @type {import("../core/types.js").AppState} */
-const state = {
-  currentScreen: "camera",
-  activeFilter: "all",
-  presets,
-  savedCalibrations,
-  activeReference: initialActiveRef,
-  draftCalibration: null,
-  shots: [],
-  selectedShotId: null,
-  showSkeletonOverlay: true,
-  settings: loadSettings(),
-  runtime: {
-    mpStatus: "loading",
-    mpMessage: "Загрузка ИИ...",
-    cameraReady: false,
-    cameraError: null,
-    isRecordingPose: false,
-    countdownSec: 0,
-    holdMs: 0,
-    shutterCooldownMs: 0
-  }
-};
+const state = createInitialState();
 
 function notify() {
   for (const fn of listeners) fn(state);
@@ -153,21 +109,7 @@ export function commitCalibrationDraft(confirmedRef, saveToLibrary = true) {
     return { ok: false, error: skelCheck.error };
   }
 
-  const isPreset = confirmedRef.source === "preset";
-  const nextId = isPreset
-    ? `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    : confirmedRef.id;
-
-  /** @type {import("../core/types.js").PoseReference} */
-  const clean = {
-    ...confirmedRef,
-    id: nextId,
-    name: nameCheck.name,
-    source: saveToLibrary ? "custom" : confirmedRef.source,
-    category: saveToLibrary ? "saved" : confirmedRef.category,
-    landmarks: cloneLandmarks(confirmedRef.landmarks),
-    autoLandmarks: cloneLandmarks(confirmedRef.autoLandmarks)
-  };
+  const clean = buildCommittedCalibration(confirmedRef, nameCheck.name, saveToLibrary);
 
   if (saveToLibrary) {
     const idx = state.savedCalibrations.findIndex((c) => c.id === clean.id);
@@ -311,8 +253,23 @@ export function addCapturedShot(shot) {
  * @returns {void}
  */
 export function selectShot(shotId) {
-  state.selectedShotId = shotId;
+  const resolved = resolveSelectedShot(state.shots, shotId);
+  state.selectedShotId = resolved ? resolved.id : null;
   notify();
+}
+
+/**
+ * Удаление дубля из ленты сессии с переключением на соседний валидный снимок.
+ * @param {string} shotId
+ * @returns {boolean} true, если снимок был найден и удален
+ */
+export function deleteShot(shotId) {
+  const res = removeShotAndResolveSelection(state.shots, shotId, state.selectedShotId);
+  if (!res.removed) return false;
+  state.shots = res.shots;
+  state.selectedShotId = res.selectedShotId;
+  notify();
+  return true;
 }
 
 /**

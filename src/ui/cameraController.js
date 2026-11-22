@@ -133,8 +133,11 @@ export function createCameraController(cameraView) {
       : cloneLandmarks(st.activeReference.landmarks);
 
     addCapturedShot({
-      id: `shot-${Date.now()}`,
+      id: `shot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       referenceId: st.activeReference.id,
+      referenceName: st.activeReference.name,
+      referenceImageDataUrl: st.activeReference.imageDataUrl,
+      refMirrored: st.settings.mirrorRef,
       imageDataUrl: dataUrl,
       score,
       userLandmarks: userLandmarks ? getMirroredCopy(userLandmarks) : null,

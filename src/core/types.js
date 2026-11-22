@@ -28,6 +28,9 @@
  * @typedef {Object} CapturedShot
  * @property {string} id - Уникальный идентификатор снимка
  * @property {string} referenceId - ID эталона PoseReference
+ * @property {string} [referenceName] - Название эталона на момент съемки
+ * @property {string} [referenceImageDataUrl] - Data URL эталона на момент съемки
+ * @property {boolean} [refMirrored] - Был ли включен mirrorRef на момент съемки
  * @property {string} imageDataUrl - Чистый отзеркаленный JPEG Data URL
  * @property {number} score - Итоговый процент совпадения (0..100)
  * @property {JointPoint[] | null} userLandmarks - Скелет пользователя в момент спуска
