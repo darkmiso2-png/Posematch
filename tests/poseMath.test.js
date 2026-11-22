@@ -7,6 +7,7 @@ import {
   getMirroredCopy,
   isJointActive,
   midpoint,
+  remapPaddedLandmarks,
   wrapAngle
 } from "../src/core/poseMath.js";
 
@@ -80,5 +81,51 @@ describe("computeTargetPointsPx", () => {
     expect(smoothing.initialized).toBe(true);
     expect(pts[11].active).toBe(true);
     expect(pts[0].y).toBeLessThan(pts[11].y);
+  });
+});
+
+describe("remapPaddedLandmarks", () => {
+  it("maps center and original image corners from 15% padded canvas back into [0..1]", () => {
+    const padRatio = 0.15;
+    const min = padRatio / (1 + 2 * padRatio);
+    const max = (1 + padRatio) / (1 + 2 * padRatio);
+    const remapped = remapPaddedLandmarks(
+      [
+        { x: 0.5, y: 0.5, z: -0.2, visibility: 0.9 },
+        { x: min, y: min, z: 0, visibility: 1 },
+        { x: max, y: max, z: 0, visibility: 0.8 },
+        { x: 0.01, y: 0.99, z: 0, visibility: 0.7 }
+      ],
+      padRatio
+    );
+    expect(remapped[0].x).toBeCloseTo(0.5, 6);
+    expect(remapped[0].y).toBeCloseTo(0.5, 6);
+    expect(remapped[0].z).toBeCloseTo(-0.2, 6);
+    expect(remapped[0].visibility).toBeCloseTo(0.9, 6);
+    expect(remapped[1].x).toBeCloseTo(0, 6);
+    expect(remapped[1].y).toBeCloseTo(0, 6);
+    expect(remapped[2].x).toBeCloseTo(1, 6);
+    expect(remapped[2].y).toBeCloseTo(1, 6);
+    expect(remapped[3].x).toBe(0);
+    expect(remapped[3].y).toBe(1);
+  });
+
+  it("supports exact rounded pixel layout mapping", () => {
+    const layout = { imgX: 15, imgY: 30, imgW: 100, imgH: 200, canvasW: 130, canvasH: 260 };
+    const remapped = remapPaddedLandmarks(
+      [
+        { x: 15 / 130, y: 30 / 260 },
+        { x: 115 / 130, y: 230 / 260 },
+        { x: 65 / 130, y: 130 / 260 }
+      ],
+      0.15,
+      layout
+    );
+    expect(remapped[0].x).toBeCloseTo(0, 6);
+    expect(remapped[0].y).toBeCloseTo(0, 6);
+    expect(remapped[1].x).toBeCloseTo(1, 6);
+    expect(remapped[1].y).toBeCloseTo(1, 6);
+    expect(remapped[2].x).toBeCloseTo(0.5, 6);
+    expect(remapped[2].y).toBeCloseTo(0.5, 6);
   });
 });

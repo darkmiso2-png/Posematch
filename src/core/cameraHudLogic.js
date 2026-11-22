@@ -271,3 +271,17 @@ export function shouldMirrorCamera(facingMode, deviceLabel = "") {
   if (!facingMode && /\b(back|rear|environment)\b/i.test(deviceLabel)) return false;
   return true;
 }
+
+/**
+ * Определяет направление камеры ("user" | "environment") по deviceId или label для fallback-запроса.
+ * @param {string} [deviceId]
+ * @param {string} [deviceLabel]
+ * @returns {"user" | "environment" | null}
+ */
+export function inferFacingModeFromDevice(deviceId = "", deviceLabel = "") {
+  const combined = `${deviceLabel} ${deviceId}`.trim();
+  if (!combined) return null;
+  if (/(?:^|[^a-zа-яё])(back|rear|environment|тыл|задн)/i.test(combined)) return "environment";
+  if (/(?:^|[^a-zа-яё])(front|user|фронт)/i.test(combined)) return "user";
+  return null;
+}

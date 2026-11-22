@@ -1,4 +1,4 @@
-import { VOICE_COOLDOWN_MS } from "../core/constants.js";
+import { SPEECH_CANCEL_DELAY_MS, VOICE_COOLDOWN_MS } from "../core/constants.js";
 import { clamp } from "../core/poseMath.js";
 
 /** @type {AudioContext | null} */
@@ -6,6 +6,9 @@ let audioCtx = null;
 let unlockInstalled = false;
 let lastBeepTime = 0;
 let lastVoiceTime = 0;
+let speechSeq = 0;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let speechTimerId = null;
 
 /**
  * Ленивая инициализация и разблокировка AudioContext после жеста пользователя.
@@ -27,16 +30,61 @@ export function ensureAudioContext() {
 }
 
 /**
- * Одноразовая разблокировка AudioContext по первому жесту pointerdown (Autoplay Policy).
+ * @param {SpeechSynthesis} synth
+ * @returns {{ voices: SpeechSynthesisVoice[], ruVoice: SpeechSynthesisVoice | null }}
+ */
+function findRussianVoice(synth) {
+  const voices = typeof synth.getVoices === "function" ? synth.getVoices() : [];
+  const ruVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("ru")) || null;
+  return { voices, ruVoice };
+}
+
+/**
+ * Разблокировка мобильного TTS-движка (SpeechSynthesis) внутри пользовательского жеста.
+ * @returns {{ supported: boolean, missingRussianVoice: boolean }}
+ */
+export function primeSpeechSynthesis() {
+  if (
+    typeof window === "undefined" ||
+    !("speechSynthesis" in window) ||
+    typeof SpeechSynthesisUtterance === "undefined"
+  ) {
+    return { supported: false, missingRussianVoice: false };
+  }
+  const synth = window.speechSynthesis;
+  try {
+    const { voices, ruVoice } = findRussianVoice(synth);
+    if (typeof synth.resume === "function") synth.resume();
+    const blank = new SpeechSynthesisUtterance("");
+    blank.lang = "ru-RU";
+    if (ruVoice) blank.voice = ruVoice;
+    blank.volume = 0;
+    synth.speak(blank);
+    return {
+      supported: true,
+      missingRussianVoice: voices.length > 0 && !ruVoice
+    };
+  } catch (err) {
+    console.warn("SpeechSynthesis prime skipped:", err);
+    return { supported: false, missingRussianVoice: false };
+  }
+}
+
+/**
+ * Одноразовая разблокировка AudioContext и SpeechSynthesis по первому жесту pointerdown.
  * @returns {void}
  */
 export function installAudioUnlockListener() {
   if (unlockInstalled || typeof window === "undefined") return;
   unlockInstalled = true;
-  window.addEventListener("pointerdown", () => ensureAudioContext(), {
-    once: true,
-    passive: true
-  });
+  window.addEventListener(
+    "pointerdown",
+    () => {
+      ensureAudioContext();
+      primeSpeechSynthesis();
+    },
+    { once: true, passive: true }
+  );
 }
 
 /**
@@ -138,44 +186,83 @@ export function playCountdownTick() {
 }
 
 /**
- * Голосовая подсказка на русском языке с защитой от наложения.
+ * @typedef {Object} SpeakHintResult
+ * @property {boolean} ok
+ * @property {"disabled" | "unsupported" | "cooldown" | "no_russian_voice" | "error"} [reason]
+ */
+
+/**
+ * Голосовая подсказка на русском языке с защитой от гонки cancel()+speak() на Android.
  * @param {string} text
  * @param {boolean} enabled
  * @param {number} now
  * @param {number} [intervalMs]
- * @returns {void}
+ * @returns {SpeakHintResult}
  */
 export function speakRussianHint(text, enabled, now, intervalMs = VOICE_COOLDOWN_MS) {
+  if (!enabled || !text) return { ok: false, reason: "disabled" };
   if (
-    !enabled ||
-    !text ||
     typeof window === "undefined" ||
     !("speechSynthesis" in window) ||
     typeof SpeechSynthesisUtterance === "undefined"
   ) {
-    return;
+    return { ok: false, reason: "unsupported" };
   }
-  if (now - lastVoiceTime < intervalMs) return;
+
+  const synth = window.speechSynthesis;
   try {
-    if (window.speechSynthesis.speaking) return;
+    const { voices, ruVoice } = findRussianVoice(synth);
+    if (voices.length > 0 && !ruVoice) {
+      return { ok: false, reason: "no_russian_voice" };
+    }
+    if (now - lastVoiceTime < intervalMs) {
+      return { ok: false, reason: "cooldown" };
+    }
+
     lastVoiceTime = now;
+    const seq = ++speechSeq;
+    if (speechTimerId !== null) {
+      clearTimeout(speechTimerId);
+      speechTimerId = null;
+    }
+
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang = "ru-RU";
     utt.rate = 1.05;
-    const voices = window.speechSynthesis.getVoices();
-    const ruVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("ru"));
     if (ruVoice) utt.voice = ruVoice;
-    window.speechSynthesis.speak(utt);
+
+    const dispatchSpeak = () => {
+      if (seq !== speechSeq) return;
+      if (typeof synth.resume === "function") synth.resume();
+      synth.speak(utt);
+    };
+
+    if (synth.speaking || synth.pending) {
+      synth.cancel();
+      speechTimerId = setTimeout(() => {
+        speechTimerId = null;
+        dispatchSpeak();
+      }, SPEECH_CANCEL_DELAY_MS);
+    } else {
+      dispatchSpeak();
+    }
+    return { ok: true };
   } catch (err) {
     console.warn("SpeechSynthesis skipped:", err);
+    return { ok: false, reason: "error" };
   }
 }
 
 /**
- * Остановка текущей речи.
+ * Остановка текущей речи и отмена отложенной реплики.
  * @returns {void}
  */
 export function cancelSpeech() {
+  speechSeq += 1;
+  if (speechTimerId !== null) {
+    clearTimeout(speechTimerId);
+    speechTimerId = null;
+  }
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
   }

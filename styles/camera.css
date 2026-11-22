@@ -219,3 +219,8 @@
 .cam-threshold-slider {
   width: 100%;
 }
+
+.viewport-box.has-camera-error .hud-bar,
+.viewport-box:has(#camera-fallback:not([hidden])) .hud-bar {
+  display: none;
+}

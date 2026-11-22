@@ -1,7 +1,11 @@
 import { computeShutterRingProgress } from "../../core/cameraHudLogic.js";
 import { AUTO_SHUTTER_HOLD_MS } from "../../core/constants.js";
 import { getMirroredCopy } from "../../core/poseMath.js";
-import { cancelSpeech, ensureAudioContext } from "../../services/audioVoiceService.js";
+import {
+  cancelSpeech,
+  ensureAudioContext,
+  primeSpeechSynthesis
+} from "../../services/audioVoiceService.js";
 import { getState, navigateTo, openCalibrationDraft, updateSettings } from "../../state/store.js";
 import { drawStaticSkeleton } from "../overlayRenderer.js";
 
@@ -23,6 +27,8 @@ const SHUTTER_RING_RADIUS = 28;
 export function createCameraScreen(root, actions) {
   const video = /** @type {HTMLVideoElement} */ (root.querySelector("#webcam"));
   const overlayCanvas = /** @type {HTMLCanvasElement} */ (root.querySelector("#overlay-canvas"));
+  const viewportBox = /** @type {HTMLElement | null} */ (root.querySelector(".viewport-box"));
+  const hudBar = /** @type {HTMLElement | null} */ (root.querySelector(".hud-bar"));
   const noticeEl = /** @type {HTMLElement} */ (root.querySelector("#cam-notice"));
   const noticeText = /** @type {HTMLElement} */ (root.querySelector("#cam-notice-text"));
   const noticeClose = /** @type {HTMLButtonElement} */ (root.querySelector("#cam-notice-close"));
@@ -67,6 +73,7 @@ export function createCameraScreen(root, actions) {
   let thumbLoadSeq = 0;
   /** @type {import("../../core/cameraHudLogic.js").CameraErrorInfo | null} */
   let cameraErrorInfo = null;
+  let missingRuVoiceNotified = false;
 
   /**
    * @param {string} text
@@ -81,6 +88,12 @@ export function createCameraScreen(root, actions) {
   function clearNotice() {
     noticeEl.hidden = true;
     noticeText.textContent = "";
+  }
+
+  function notifyMissingRuVoice() {
+    if (missingRuVoiceNotified) return;
+    missingRuVoiceNotified = true;
+    showNotice("На устройстве не установлен русский голосовой пакет TTS", "info");
   }
 
   /** @param {boolean} mirrored */
@@ -177,7 +190,13 @@ export function createCameraScreen(root, actions) {
   btnVoice.addEventListener("click", () => {
     ensureAudioContext();
     const next = !getState().settings.voice;
-    if (!next) cancelSpeech();
+    if (next) {
+      missingRuVoiceNotified = false;
+      const tts = primeSpeechSynthesis();
+      if (tts.missingRussianVoice) notifyMissingRuVoice();
+    } else {
+      cancelSpeech();
+    }
     updateSettings({ voice: next });
   });
 
@@ -247,7 +266,10 @@ export function createCameraScreen(root, actions) {
     btnRecord.disabled = !streamReady || r.isRecordingPose;
     btnCalib.disabled = !state.activeReference || r.isRecordingPose;
 
-    camFallback.hidden = !r.cameraError;
+    const hasCameraError = Boolean(r.cameraError);
+    camFallback.hidden = !hasCameraError;
+    if (hudBar) hudBar.hidden = hasCameraError;
+    viewportBox?.classList.toggle("has-camera-error", hasCameraError);
     if (r.cameraError) {
       camErrTitle.textContent = cameraErrorInfo?.title || "Камера недоступна";
       camErrText.textContent = r.cameraError;
@@ -268,6 +290,7 @@ export function createCameraScreen(root, actions) {
     setCameraErrorInfo,
     showNotice,
     clearNotice,
+    notifyMissingRuVoice,
     updateHud,
     triggerFlash
   };

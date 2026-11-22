@@ -1,7 +1,14 @@
 export const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+export const HEAVY_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task";
 
 export const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+
+export const IMAGE_POSE_CONFIDENCE = 0.2;
+export const IMAGE_PREPROCESS_PAD_RATIO = 0.15;
+export const CAMERA_RELEASE_DELAY_MS = 150;
+export const SPEECH_CANCEL_DELAY_MS = 60;
 
 export const AUTO_SHUTTER_HOLD_MS = 800;
 export const SHUTTER_COOLDOWN_MS = 2200;

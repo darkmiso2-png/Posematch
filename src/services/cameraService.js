@@ -1,10 +1,32 @@
-import { classifyCameraError } from "../core/cameraHudLogic.js";
+import { classifyCameraError, inferFacingModeFromDevice } from "../core/cameraHudLogic.js";
+import { CAMERA_RELEASE_DELAY_MS } from "../core/constants.js";
 
 /** @type {MediaStream | null} */
 let activeStream = null;
 /** @type {(() => void) | null} */
 let activeTrackCleanup = null;
 let streamRequestId = 0;
+/** @type {Map<string, string>} */
+const deviceLabels = new Map();
+
+/**
+ * Остановка всех треков переданного MediaStream.
+ * @param {MediaStream | null | undefined} stream
+ * @returns {void}
+ */
+export function stopStreamTracks(stream) {
+  if (!stream) return;
+  stream.getTracks().forEach((t) => t.stop());
+}
+
+/**
+ * Асинхронная пауза.
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * Получение списка доступных видеокамер.
@@ -13,7 +35,23 @@ let streamRequestId = 0;
 export async function listVideoDevices() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
   const devices = await navigator.mediaDevices.enumerateDevices();
-  return devices.filter((d) => d.kind === "videoinput");
+  const videos = devices.filter((d) => d.kind === "videoinput");
+  videos.forEach((d) => {
+    if (d.deviceId && d.label) deviceLabels.set(d.deviceId, d.label);
+  });
+  return videos;
+}
+
+/**
+ * @param {string} deviceId
+ * @returns {Promise<string>}
+ */
+async function resolveDeviceLabel(deviceId) {
+  if (!deviceId) return "";
+  const cached = deviceLabels.get(deviceId);
+  if (cached) return cached;
+  const videos = await listVideoDevices().catch(() => /** @type {MediaDeviceInfo[]} */ ([]));
+  return videos.find((d) => d.deviceId === deviceId)?.label || "";
 }
 
 /**
@@ -27,11 +65,19 @@ export function stopCameraStream(videoEl = null) {
     activeTrackCleanup();
     activeTrackCleanup = null;
   }
-  if (activeStream) {
-    activeStream.getTracks().forEach((t) => t.stop());
-    activeStream = null;
-  }
+  const prevStream = activeStream;
+  stopStreamTracks(prevStream);
+  activeStream = null;
   if (videoEl) {
+    const attached = videoEl.srcObject;
+    if (
+      attached &&
+      attached !== prevStream &&
+      typeof attached === "object" &&
+      "getTracks" in attached
+    ) {
+      stopStreamTracks(/** @type {MediaStream} */ (attached));
+    }
     videoEl.pause();
     videoEl.srcObject = null;
   }
@@ -48,9 +94,21 @@ export function stopCameraStream(videoEl = null) {
  * @property {import("../core/cameraHudLogic.js").CameraErrorInfo | null} [errorInfo]
  */
 
+/** @returns {StartCameraResult} */
+function createAbortedResult() {
+  return {
+    ok: false,
+    aborted: true,
+    deviceId: "",
+    facingMode: "",
+    deviceLabel: "",
+    error: null,
+    errorInfo: null
+  };
+}
+
 /**
- * Запуск камеры с корректным освобождением предыдущего потока и защитой от гонок.
- * При устаревшем deviceId (OverconstrainedError/NotFoundError) автоматически пробует камеру по умолчанию.
+ * Запуск камеры с освобождением предыдущего потока, паузой сенсора и fallback по facingMode.
  * @param {HTMLVideoElement} videoEl
  * @param {string} [deviceId]
  * @param {() => void} [onTrackEnded]
@@ -74,48 +132,58 @@ export async function startCameraStream(videoEl, deviceId = "", onTrackEnded) {
     };
   }
 
-  /** @param {string} targetId */
-  async function requestStream(targetId) {
-    /** @type {MediaStreamConstraints} */
-    const constraints = {
-      audio: false,
-      video: targetId
-        ? { deviceId: { exact: targetId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
-    };
-    return navigator.mediaDevices.getUserMedia(constraints);
+  await delay(CAMERA_RELEASE_DELAY_MS);
+  if (reqId !== streamRequestId) return createAbortedResult();
+
+  /** @param {MediaTrackConstraints} videoConstraints */
+  async function requestStream(videoConstraints) {
+    return navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraints });
   }
 
   try {
     /** @type {MediaStream} */
     let stream;
     try {
-      stream = await requestStream(deviceId);
+      const primary = deviceId
+        ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" };
+      stream = await requestStream(primary);
     } catch (firstErr) {
+      if (reqId !== streamRequestId) return createAbortedResult();
       const firstName = /** @type {{ name?: string }} */ (firstErr)?.name || "";
-      if (
-        deviceId &&
-        (firstName === "OverconstrainedError" ||
-          firstName === "NotFoundError" ||
-          firstName === "ConstraintNotSatisfiedError")
-      ) {
-        stream = await requestStream("");
+      const isConstraintErr =
+        firstName === "OverconstrainedError" ||
+        firstName === "NotFoundError" ||
+        firstName === "ConstraintNotSatisfiedError";
+      const isReadableErr = firstName === "NotReadableError";
+
+      if (deviceId && (isReadableErr || isConstraintErr)) {
+        const label = await resolveDeviceLabel(deviceId);
+        if (reqId !== streamRequestId) return createAbortedResult();
+        const inferredFacing = inferFacingModeFromDevice(deviceId, label);
+        if (inferredFacing) {
+          stream = await requestStream({
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: { ideal: inferredFacing }
+          });
+        } else if (isConstraintErr) {
+          stream = await requestStream({
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user"
+          });
+        } else {
+          throw firstErr;
+        }
       } else {
         throw firstErr;
       }
     }
 
     if (reqId !== streamRequestId) {
-      stream.getTracks().forEach((t) => t.stop());
-      return {
-        ok: false,
-        aborted: true,
-        deviceId: "",
-        facingMode: "",
-        deviceLabel: "",
-        error: null,
-        errorInfo: null
-      };
+      stopStreamTracks(stream);
+      return createAbortedResult();
     }
 
     activeStream = stream;
@@ -125,6 +193,7 @@ export async function startCameraStream(videoEl, deviceId = "", onTrackEnded) {
     const facingMode =
       typeof trackSettings?.facingMode === "string" ? trackSettings.facingMode : "";
     const deviceLabel = track?.label || "";
+    if (actualId && deviceLabel) deviceLabels.set(actualId, deviceLabel);
 
     if (track && onTrackEnded) {
       const handleEnded = () => {
@@ -134,22 +203,23 @@ export async function startCameraStream(videoEl, deviceId = "", onTrackEnded) {
         onTrackEnded();
       };
       track.addEventListener("ended", handleEnded, { once: true });
-      activeTrackCleanup = () => track.removeEventListener("ended", handleEnded);
+      activeTrackCleanup = () => {
+        track.removeEventListener("ended", handleEnded);
+        track.onended = null;
+      };
     }
 
     videoEl.srcObject = stream;
     await videoEl.play();
     if (reqId !== streamRequestId) {
-      stream.getTracks().forEach((t) => t.stop());
-      return {
-        ok: false,
-        aborted: true,
-        deviceId: "",
-        facingMode: "",
-        deviceLabel: "",
-        error: null,
-        errorInfo: null
-      };
+      if (activeTrackCleanup) {
+        activeTrackCleanup();
+        activeTrackCleanup = null;
+      }
+      stopStreamTracks(stream);
+      if (activeStream === stream) activeStream = null;
+      videoEl.srcObject = null;
+      return createAbortedResult();
     }
     return {
       ok: true,
@@ -160,17 +230,7 @@ export async function startCameraStream(videoEl, deviceId = "", onTrackEnded) {
       errorInfo: null
     };
   } catch (err) {
-    if (reqId !== streamRequestId) {
-      return {
-        ok: false,
-        aborted: true,
-        deviceId: "",
-        facingMode: "",
-        deviceLabel: "",
-        error: null,
-        errorInfo: null
-      };
-    }
+    if (reqId !== streamRequestId) return createAbortedResult();
     const info = classifyCameraError(err, hasMediaDevices, isSecure);
     return {
       ok: false,

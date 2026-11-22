@@ -253,7 +253,10 @@ export function createCameraController(cameraView) {
           cameraView.updateHud(ev.totalScore, hint, st.runtime.holdMs);
           playParktronicBeep(ev.totalScore, st.settings.threshold, st.settings.parktronic, now);
           if (!above && !st.runtime.isRecordingPose && st.runtime.shutterCooldownMs <= 0) {
-            speakRussianHint(ev.worstHint, st.settings.voice, now);
+            const voiceRes = speakRussianHint(ev.worstHint, st.settings.voice, now);
+            if (voiceRes.reason === "no_russian_voice") {
+              cameraView.notifyMissingRuVoice();
+            }
           }
         } else {
           lastScore = 0;

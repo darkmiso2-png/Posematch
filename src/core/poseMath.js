@@ -113,3 +113,38 @@ export function getMirroredCopy(lms) {
   }
   return copy;
 }
+
+/**
+ * @typedef {Object} PaddedCanvasLayout
+ * @property {number} imgX
+ * @property {number} imgY
+ * @property {number} imgW
+ * @property {number} imgH
+ * @property {number} canvasW
+ * @property {number} canvasH
+ */
+
+/**
+ * Пересчитывает нормализованные координаты [0..1] из padded-холста обратно в координаты исходного изображения [0..1].
+ * @param {import("./types.js").JointPoint[]} lms
+ * @param {number} [padRatio]
+ * @param {PaddedCanvasLayout | null} [layout]
+ * @returns {import("./types.js").JointPoint[]}
+ */
+export function remapPaddedLandmarks(lms, padRatio = 0.15, layout = null) {
+  const offsetX =
+    layout && layout.canvasW > 0 ? layout.imgX / layout.canvasW : padRatio / (1 + 2 * padRatio);
+  const offsetY =
+    layout && layout.canvasH > 0 ? layout.imgY / layout.canvasH : padRatio / (1 + 2 * padRatio);
+  const spanX =
+    layout && layout.canvasW > 0 ? layout.imgW / layout.canvasW : 1 / (1 + 2 * padRatio);
+  const spanY =
+    layout && layout.canvasH > 0 ? layout.imgH / layout.canvasH : 1 / (1 + 2 * padRatio);
+
+  return lms.map((p) => ({
+    x: clamp((p.x - offsetX) / spanX, 0, 1),
+    y: clamp((p.y - offsetY) / spanY, 0, 1),
+    z: p.z ?? 0,
+    visibility: p.visibility ?? 1
+  }));
+}

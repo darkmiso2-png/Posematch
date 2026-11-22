@@ -29,18 +29,18 @@
 - `src/core/types.js` — централизованные JSDoc `@typedef` контракты из `SPEC.md`.
 - `src/core/constants.js` — константы MediaPipe, суставов, костей, порогов и таймингов.
 - `src/core/calibrationLogic.js` — чистая логика калибровки: координаты, hit-test, видимость, L/R зеркало, валидация скелета и жесты.
-- `src/core/cameraHudLogic.js` — чистая логика Экрана 3: автозатвор 800 ms, SVG-кольцо, отсчет 3-2-1, классификатор ошибок камеры и стартовый эталон.
+- `src/core/cameraHudLogic.js` — чистая логика Экрана 3: автозатвор 800 ms, SVG-кольцо, отсчет 3-2-1, классификатор ошибок камеры, определение направления по deviceId/label и стартовый эталон.
 - `src/core/galleryLogic.js` — чистая логика Экрана 4: выбор/удаление дублей, разрешение эталона снимка, санитизация имени JPG и форматирование метаданных.
-- `src/core/poseMath.js` — чистая математика углов, координат, отзеркаливания и базовых скелетов.
+- `src/core/poseMath.js` — чистая математика углов, координат, отзеркаливания, обратного маппинга padded-холста и базовых скелетов.
 - `src/core/poseEvaluator.js` — оценка совпадения позы по углам сегментов и генерация подсказок.
 - `src/core/poseAlignment.js` — расчет целевого скелета на экране (режим «К телу» и сглаживание).
 - `src/core/presetData.js` — данные и позы встроенных пресетов с категориями фильтрации.
 - `src/core/presetRenderer.js` — генерация PNG Data URL превью для встроенных пресетов.
 - `src/core/pwaLogic.js` — чистая логика PWA: классификация запросов SW, фильтрация устаревших кэшей и проверка условий регистрации.
 - `src/services/pwaService.js` — безопасная неблокирующая регистрация `./sw.js` после загрузки страницы.
-- `src/services/mediapipeService.js` — загрузка и вызов MediaPipe PoseLandmarker (GPU/CPU fallback).
-- `src/services/cameraService.js` — доступ к камерам, переключение устройств и захват чистого JPEG кадра.
-- `src/services/audioVoiceService.js` — Web Audio «Парктроник», звук затвора и русские голосовые подсказки.
+- `src/services/mediapipeService.js` — загрузка и вызов MediaPipe PoseLandmarker (VIDEO Lite 0.5 и 3-шаговый каскад Lite 0.2 -> Heavy 0.2 -> Heavy + padded canvas для фото).
+- `src/services/cameraService.js` — доступ к камерам, пауза освобождения сенсора, `facingMode`-fallback, переключение устройств и захват чистого JPEG кадра.
+- `src/services/audioVoiceService.js` — Web Audio «Парктроник», звук затвора, прайминг TTS и русские голосовые подсказки с проверкой `ru`-голоса и очередью отмены.
 - `src/services/storageService.js` — чтение/запись пользовательских калибровок и настроек в `localStorage`.
 - `src/state/store.js` — реактивный Store состояния `AppState` и экшены переходов.
 - `src/state/storeHelpers.js` — вспомогательные функции инициализации, клонирования и сборки калибровки для `store.js`.
@@ -63,3 +63,4 @@
 - `tests/galleryFeature.test.js` — юнит-тесты санитизации имени JPG, выбора/удаления дублей, разрешения эталона и экшенов Галереи в Store.
 - `tests/router.test.js` — юнит-тесты `createScreenRouter`, переходов `onEnter`/`onLeave` и защиты от реентрантного вызова.
 - `tests/pwaFeature.test.js` — юнит-тесты стратегий SW, фильтрации кэшей, валидности `manifest.webmanifest` и PNG-сигнатур/размеров иконок.
+- `tests/mobileHotfix.test.js` — юнит-тесты мобильного хотфикса: освобождение сенсора/fallback в `cameraService` и прайминг/очередь/`ru`-проверка в `audioVoiceService`.
