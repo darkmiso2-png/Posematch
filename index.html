@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="./styles/hub.css" />
     <link rel="stylesheet" href="./styles/hubCards.css" />
     <link rel="stylesheet" href="./styles/calibration.css" />
+    <link rel="stylesheet" href="./styles/camera.css" />
     <script type="importmap">
       {
         "imports": {
@@ -27,7 +28,12 @@
         </div>
       </header>
 
-      <section id="screen-hub" class="screen active">
+      <section id="screen-hub" class="screen" hidden>
+        <div class="hub-nav-head">
+          <button id="hub-btn-back" class="btn" type="button">← К камере</button>
+          <span class="hub-nav-title">Библиотека поз</span>
+        </div>
+
         <div id="hub-notice" class="hub-notice" role="status" aria-live="polite" hidden>
           <span id="hub-notice-text" class="hub-notice-text"></span>
           <button
@@ -140,79 +146,114 @@
         </div>
       </section>
 
-      <section id="screen-camera" class="screen" hidden>
+      <section id="screen-camera" class="screen active">
+        <div id="cam-notice" class="cam-notice" role="status" aria-live="polite" hidden>
+          <span id="cam-notice-text" class="cam-notice-text"></span>
+          <button
+            id="cam-notice-close"
+            class="cam-notice-close"
+            type="button"
+            aria-label="Закрыть уведомление"
+          >
+            ×
+          </button>
+        </div>
+
         <div class="viewport-box">
           <video id="webcam" autoplay playsinline muted></video>
           <canvas id="overlay-canvas"></canvas>
-          <canvas id="ref-mini-canvas" class="ref-mini" width="72" height="96"></canvas>
-          <div id="countdown-overlay" class="countdown-badge">3</div>
+
+          <button
+            id="ref-mini-btn"
+            class="ref-mini-btn"
+            type="button"
+            aria-label="Открыть библиотеку поз"
+          >
+            <canvas id="ref-mini-canvas" class="ref-mini-canvas" width="72" height="96"></canvas>
+            <span id="ref-mini-name" class="ref-mini-name">Эталон</span>
+          </button>
+
+          <div id="countdown-overlay" class="countdown-overlay">
+            <span id="countdown-num" class="countdown-num">3</span>
+            <span class="countdown-sub">Приготовьте позу...</span>
+            <button id="btn-cancel-record" class="btn" type="button">Отмена</button>
+          </div>
+
           <div id="shutter-flash" class="shutter-flash"></div>
+
           <div class="hud-bar">
             <span id="hud-score" class="hud-score">0%</span>
-            <div style="flex: 1">
+            <div class="hud-bar-col">
               <div id="hud-hint" class="hud-hint">Встаньте в кадр</div>
-              <div
-                style="
-                  height: 4px;
-                  background: rgba(255, 255, 255, 0.12);
-                  border-radius: 4px;
-                  margin-top: 4px;
-                "
-              >
-                <div
-                  id="hud-hold-fill"
-                  style="
-                    height: 100%;
-                    width: 0%;
-                    background: var(--accent-green);
-                    border-radius: 4px;
-                  "
-                ></div>
+              <div class="hud-hold-track">
+                <div id="hud-hold-fill" class="hud-hold-fill"></div>
               </div>
             </div>
           </div>
-          <div
-            id="camera-fallback"
-            class="hud-bar"
-            style="top: 50%; bottom: auto; transform: translateY(-50%); flex-direction: column"
-            hidden
-          >
-            <span id="camera-error-msg" class="muted-note">Камера не активна</span>
-            <button id="btn-retry-cam" class="btn btn-primary" type="button">Повторить</button>
+
+          <div id="camera-fallback" class="cam-fallback-card" role="alert" hidden>
+            <strong id="camera-error-title" class="cam-fallback-title">Камера недоступна</strong>
+            <span id="camera-error-msg" class="cam-fallback-msg">Камера не активна</span>
+            <div class="cam-fallback-actions">
+              <button id="btn-retry-cam" class="btn btn-primary" type="button">
+                Повторить доступ к камере
+              </button>
+              <button id="btn-fallback-hub" class="btn" type="button">Библиотека поз</button>
+            </div>
           </div>
         </div>
+
         <div class="card">
+          <div class="cam-shutter-bar">
+            <button id="cam-btn-hub" class="btn" type="button">Позы</button>
+            <button
+              id="btn-manual-shutter"
+              class="shutter-ring-btn"
+              type="button"
+              aria-label="Авто или ручной снимок"
+            >
+              <svg class="shutter-ring-svg" viewBox="0 0 68 68" aria-hidden="true">
+                <circle class="shutter-ring-track" cx="34" cy="34" r="28"></circle>
+                <circle
+                  id="shutter-ring-progress"
+                  class="shutter-ring-progress"
+                  cx="34"
+                  cy="34"
+                  r="28"
+                ></circle>
+              </svg>
+              <span class="shutter-ring-core">АВТО</span>
+            </button>
+            <button id="cam-btn-gallery" class="btn" type="button">
+              Галерея (<span id="cam-gallery-count">0</span>)
+            </button>
+          </div>
+
           <div class="row-2">
             <button id="toggle-attach" class="btn" type="button">К телу</button>
             <button id="toggle-mirror" class="btn" type="button">Зеркало</button>
             <button id="toggle-parktronic" class="btn" type="button">Парктроник</button>
             <button id="toggle-voice" class="btn" type="button">Голос</button>
           </div>
-          <label class="muted-note">
-            Порог автоспуска: <strong id="threshold-value">80%</strong>
+
+          <label class="muted-note cam-threshold-label">
+            <span>Порог автоспуска: <strong id="threshold-value">80%</strong></span>
             <input
               id="threshold-slider"
+              class="cam-threshold-slider"
               type="range"
               min="60"
               max="95"
               value="80"
-              style="width: 100%"
             />
           </label>
-          <select id="camera-select" class="btn"></select>
+
+          <select id="camera-select" class="btn" aria-label="Выбор камеры"></select>
+
           <div class="row-2">
-            <button id="btn-manual-shutter" class="btn btn-primary" type="button">
-              АВТО / Снять
-            </button>
-            <button id="btn-record-pose" class="btn" type="button">Запись 3с</button>
-          </div>
-          <div class="row-2">
-            <button id="cam-btn-hub" class="btn" type="button">Хаб</button>
+            <button id="btn-record-pose" class="btn" type="button">Запись позы 3с</button>
             <button id="cam-btn-calib" class="btn" type="button">Править позу</button>
           </div>
-          <button id="cam-btn-gallery" class="btn" type="button">
-            Галерея (<span id="cam-gallery-count">0</span>)
-          </button>
         </div>
       </section>
 

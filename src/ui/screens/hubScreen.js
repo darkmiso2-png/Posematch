@@ -34,6 +34,7 @@ export function createHubScreen(root, actions) {
   const btnShoot = /** @type {HTMLButtonElement} */ (root.querySelector("#hub-btn-shoot"));
   const btnCalib = /** @type {HTMLButtonElement} */ (root.querySelector("#hub-btn-calib"));
   const btnGallery = /** @type {HTMLButtonElement} */ (root.querySelector("#hub-btn-gallery"));
+  const btnBack = /** @type {HTMLButtonElement | null} */ (root.querySelector("#hub-btn-back"));
   const galleryBadge = /** @type {HTMLElement} */ (root.querySelector("#hub-gallery-count"));
   const filterRow = /** @type {HTMLElement} */ (root.querySelector("#hub-filter-row"));
   const savedCountEl = /** @type {HTMLElement} */ (root.querySelector("#hub-saved-count"));
@@ -106,6 +107,9 @@ export function createHubScreen(root, actions) {
   }
 
   btnRecord.addEventListener("click", startRecordPose);
+  btnBack?.addEventListener("click", () => {
+    if (!uploader.isBusy()) navigateTo("camera");
+  });
   btnShoot.addEventListener("click", () => {
     if (!uploader.isBusy() && getState().activeReference) navigateTo("camera");
   });
@@ -161,9 +165,17 @@ export function createHubScreen(root, actions) {
       editingError,
       isBusy: busy,
       onSelect: (ref) => {
+        if (uploader.isBusy()) return;
         editingId = null;
         editingError = "";
         setActiveReference(ref);
+        navigateTo("camera");
+      },
+      onCalibrate: (ref) => {
+        if (uploader.isBusy()) return;
+        editingId = null;
+        editingError = "";
+        openCalibrationDraft(ref);
       },
       onStartRename: (ref) => {
         editingId = ref.id;

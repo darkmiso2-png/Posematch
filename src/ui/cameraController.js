@@ -1,13 +1,10 @@
-import {
-  AUTO_SHUTTER_HOLD_MS,
-  POSE_RECORD_SECONDS,
-  SHUTTER_COOLDOWN_MS
-} from "../core/constants.js";
+import { stepAutoShutter } from "../core/cameraHudLogic.js";
+import { SHUTTER_COOLDOWN_MS } from "../core/constants.js";
 import { createSmoothingState } from "../core/poseAlignment.js";
 import { evaluatePose } from "../core/poseEvaluator.js";
 import { cloneLandmarks, getMirroredCopy } from "../core/poseMath.js";
 import {
-  playCountdownTick,
+  cancelSpeech,
   playParktronicBeep,
   playShutterSound,
   speakRussianHint
@@ -15,20 +12,22 @@ import {
 import {
   captureVideoFrame,
   listVideoDevices,
-  startCameraStream
+  startCameraStream,
+  stopCameraStream
 } from "../services/cameraService.js";
 import { detectPoseOnVideo } from "../services/mediapipeService.js";
 import {
   addCapturedShot,
   getState,
-  openCalibrationDraft,
+  resetCameraRuntime,
   updateRuntime,
   updateSettings
 } from "../state/store.js";
+import { createPoseRecorder } from "./cameraPoseRecorder.js";
 import { drawStageOverlay } from "./overlayRenderer.js";
 
 /**
- * Контроллер видеопотока, автоспуска (800 ms) и записи позы 3 сек.
+ * Контроллер видеопотока, автозатвора (800 ms), паузы/возобновления и записи позы 3 сек.
  * @param {ReturnType<import("./screens/cameraScreen.js").createCameraScreen>} cameraView
  */
 export function createCameraController(cameraView) {
@@ -40,40 +39,99 @@ export function createCameraController(cameraView) {
   let lastFrameTime = performance.now();
   let lastScore = 0;
 
+  let isActive = false;
+  let rafId = 0;
+
   /** @type {Promise<void> | null} */
   let connectPromise = null;
   let connectingDeviceId = "";
 
+  function isVideoStreamReady() {
+    const v = cameraView.video;
+    const st = getState();
+    return Boolean(
+      isActive &&
+      st.currentScreen === "camera" &&
+      st.runtime.cameraReady &&
+      !st.runtime.cameraError &&
+      v.videoWidth > 0 &&
+      v.videoHeight > 0
+    );
+  }
+
+  function clearOverlayCanvas() {
+    const c = cameraView.overlayCanvas;
+    const ctx = c.getContext("2d");
+    if (ctx && c.width && c.height) {
+      ctx.clearRect(0, 0, c.width, c.height);
+    }
+  }
+
+  const recorder = createPoseRecorder({
+    cameraView,
+    isStreamReady: isVideoStreamReady,
+    ensureConnect: () => {
+      if (!connectPromise && !getState().runtime.cameraError) {
+        connectCamera();
+      }
+    },
+    getUserLandmarks: () => userLandmarks
+  });
+
   /** @param {string} [deviceId] */
   function connectCamera(deviceId = getState().settings.activeDeviceId) {
+    if (!isActive || getState().currentScreen !== "camera") return Promise.resolve();
     if (connectPromise && deviceId === connectingDeviceId) return connectPromise;
     connectingDeviceId = deviceId;
+
     const task = (async () => {
+      cameraView.setCameraErrorInfo(null);
       const res = await startCameraStream(cameraView.video, deviceId);
-      if (res.aborted) return;
+      if (res.aborted || !isActive || getState().currentScreen !== "camera") {
+        stopCameraStream(cameraView.video);
+        return;
+      }
+
+      cameraView.setCameraErrorInfo(res.errorInfo || null);
       updateRuntime({ cameraReady: res.ok, cameraError: res.error });
+
       if (res.ok) {
-        if (res.deviceId) updateSettings({ activeDeviceId: res.deviceId });
+        if (res.deviceId !== getState().settings.activeDeviceId) {
+          updateSettings({ activeDeviceId: res.deviceId });
+        }
         const cams = await listVideoDevices();
-        cameraView.setCameraList(cams, getState().settings.activeDeviceId);
+        if (isActive && getState().currentScreen === "camera") {
+          cameraView.setCameraList(cams, getState().settings.activeDeviceId);
+        }
+      } else {
+        recorder.clearPending();
+        userLandmarks = null;
+        clearOverlayCanvas();
+        cameraView.updateHud(0, "Камера не активна", 0);
       }
     })().finally(() => {
       if (connectPromise === task) connectPromise = null;
     });
+
     connectPromise = task;
     return task;
   }
 
   /** @param {number} score */
   function takeShot(score) {
+    if (!isVideoStreamReady()) return;
     const st = getState();
+    if (!st.activeReference) return;
+
     const dataUrl = captureVideoFrame(cameraView.video, true, "image/jpeg", 0.92);
-    if (!dataUrl || !st.activeReference) return;
+    if (!dataUrl) return;
+
     playShutterSound();
     cameraView.triggerFlash();
     const refLms = st.settings.mirrorRef
       ? getMirroredCopy(st.activeReference.landmarks)
       : cloneLandmarks(st.activeReference.landmarks);
+
     addCapturedShot({
       id: `shot-${Date.now()}`,
       referenceId: st.activeReference.id,
@@ -85,58 +143,18 @@ export function createCameraController(cameraView) {
     });
   }
 
-  async function recordPose3Sec() {
-    if (getState().runtime.isRecordingPose) return;
-    if (!cameraView.video.videoWidth) {
-      await connectCamera();
-      for (let i = 0; i < 20 && !cameraView.video.videoWidth; i += 1) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-    }
-    if (!cameraView.video.videoWidth) {
-      updateRuntime({ cameraError: "Подключите камеру для записи позы." });
-      return;
-    }
-    updateRuntime({ isRecordingPose: true, countdownSec: POSE_RECORD_SECONDS, holdMs: 0 });
-    for (let sec = POSE_RECORD_SECONDS; sec >= 1; sec -= 1) {
-      updateRuntime({ countdownSec: sec });
-      playCountdownTick();
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-    updateRuntime({ isRecordingPose: false, countdownSec: 0 });
-    if (!userLandmarks) {
-      cameraView.updateHud(0, "Человек не найден — запись отменена", 0);
-      return;
-    }
-    const mirrored = getState().settings.mirrorRef;
-    const dataUrl = captureVideoFrame(cameraView.video, mirrored, "image/jpeg", 0.9);
-    if (!dataUrl) return;
-    playShutterSound();
-    cameraView.triggerFlash();
-    const captured = mirrored ? getMirroredCopy(userLandmarks) : cloneLandmarks(userLandmarks);
-    openCalibrationDraft({
-      id: `rec-${Date.now()}`,
-      name: "Моя поза",
-      source: "recorded",
-      category: "saved",
-      imageDataUrl: dataUrl,
-      aspect: cameraView.video.videoWidth / cameraView.video.videoHeight,
-      landmarks: captured,
-      autoLandmarks: captured,
-      autoDetected: true,
-      createdAt: Date.now()
-    });
-  }
-
   /** @param {number} now */
   function tick(now) {
+    if (!isActive) return;
+
     const dt = Math.min(100, Math.max(0, now - lastFrameTime));
     lastFrameTime = now;
     const st = getState();
-    if (st.runtime.shutterCooldownMs > 0) {
-      st.runtime.shutterCooldownMs = Math.max(0, st.runtime.shutterCooldownMs - dt);
-    }
+
     if (st.currentScreen === "camera") {
+      recorder.step(dt);
+      if (!isActive) return;
+
       const v = cameraView.video;
       const c = cameraView.overlayCanvas;
       if (
@@ -147,11 +165,13 @@ export function createCameraController(cameraView) {
         c.width = v.videoWidth;
         c.height = v.videoHeight;
       }
+
       if (v.videoWidth > 0 && v.readyState >= 2 && v.currentTime !== lastVideoTime) {
         lastVideoTime = v.currentTime;
         lastTimestamp = Math.max(lastTimestamp + 1, Math.round(now));
         userLandmarks = detectPoseOnVideo(v, lastTimestamp);
       }
+
       const ref = st.activeReference;
       const refLms = ref
         ? st.settings.mirrorRef
@@ -159,9 +179,11 @@ export function createCameraController(cameraView) {
           : ref.landmarks
         : null;
       const ctx = c.getContext("2d");
-      if (ctx && refLms && ref) {
+      const streamReady = isVideoStreamReady();
+
+      if (ctx && refLms && ref && streamReady) {
         if (userLandmarks) {
-          const va = v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 16 / 9;
+          const va = v.videoWidth / v.videoHeight;
           const ev = evaluatePose(userLandmarks, refLms, va, ref.aspect);
           lastScore = ev.totalScore;
           drawStageOverlay(
@@ -175,17 +197,26 @@ export function createCameraController(cameraView) {
             smoothing,
             ev
           );
-          const above = ev.totalScore >= st.settings.threshold;
-          if (above && !st.runtime.isRecordingPose && st.runtime.shutterCooldownMs <= 0) {
-            st.runtime.holdMs += dt;
-            if (st.runtime.holdMs >= AUTO_SHUTTER_HOLD_MS) {
-              st.runtime.holdMs = 0;
-              st.runtime.shutterCooldownMs = SHUTTER_COOLDOWN_MS;
-              takeShot(ev.totalScore);
+
+          const shutterStep = stepAutoShutter(
+            { holdMs: st.runtime.holdMs, cooldownMs: st.runtime.shutterCooldownMs },
+            {
+              dtMs: dt,
+              hasPose: true,
+              score: ev.totalScore,
+              threshold: st.settings.threshold,
+              isRecording: st.runtime.isRecordingPose,
+              cameraReady: streamReady
             }
-          } else {
-            st.runtime.holdMs = Math.max(0, st.runtime.holdMs - dt * 2.5);
+          );
+          st.runtime.holdMs = shutterStep.holdMs;
+          st.runtime.shutterCooldownMs = shutterStep.cooldownMs;
+
+          if (shutterStep.shouldShoot) {
+            takeShot(ev.totalScore);
           }
+
+          const above = ev.totalScore >= st.settings.threshold;
           const hint = above
             ? st.runtime.shutterCooldownMs > 0
               ? "Снимок сохранён!"
@@ -193,11 +224,25 @@ export function createCameraController(cameraView) {
             : ev.worstHint;
           cameraView.updateHud(ev.totalScore, hint, st.runtime.holdMs);
           playParktronicBeep(ev.totalScore, st.settings.threshold, st.settings.parktronic, now);
-          if (!above && st.runtime.shutterCooldownMs <= 0)
+          if (!above && !st.runtime.isRecordingPose && st.runtime.shutterCooldownMs <= 0) {
             speakRussianHint(ev.worstHint, st.settings.voice, now);
+          }
         } else {
           lastScore = 0;
-          st.runtime.holdMs = 0;
+          const resetStep = stepAutoShutter(
+            { holdMs: st.runtime.holdMs, cooldownMs: st.runtime.shutterCooldownMs },
+            {
+              dtMs: dt,
+              hasPose: false,
+              score: 0,
+              threshold: st.settings.threshold,
+              isRecording: st.runtime.isRecordingPose,
+              cameraReady: streamReady
+            }
+          );
+          st.runtime.holdMs = resetStep.holdMs;
+          st.runtime.shutterCooldownMs = resetStep.cooldownMs;
+
           drawStageOverlay(
             ctx,
             c.width,
@@ -213,16 +258,61 @@ export function createCameraController(cameraView) {
         }
       }
     }
-    requestAnimationFrame(tick);
+
+    if (isActive) {
+      rafId = requestAnimationFrame(tick);
+    }
+  }
+
+  function activate() {
+    if (isActive) return;
+    isActive = true;
+    lastVideoTime = -1;
+    lastScore = 0;
+    userLandmarks = null;
+    smoothing.initialized = false;
+    lastFrameTime = performance.now();
+    cameraView.updateHud(0, "Встаньте в кадр", 0);
+    connectCamera();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function deactivate() {
+    if (!isActive) return;
+    isActive = false;
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+    recorder.cancel();
+    cancelSpeech();
+    stopCameraStream(cameraView.video);
+    userLandmarks = null;
+    lastVideoTime = -1;
+    lastScore = 0;
+    clearOverlayCanvas();
+    cameraView.updateHud(0, "Камера на паузе", 0);
+    resetCameraRuntime();
+  }
+
+  function takeManualShot() {
+    if (!isVideoStreamReady()) return;
+    const st = getState();
+    st.runtime.holdMs = 0;
+    st.runtime.shutterCooldownMs = SHUTTER_COOLDOWN_MS;
+    takeShot(lastScore);
+    cameraView.updateHud(lastScore, "Снимок сохранён!", 0);
   }
 
   return {
+    activate,
+    deactivate,
     connectCamera,
-    takeManualShot: () => takeShot(lastScore),
-    recordPose3Sec,
+    takeManualShot,
+    recordPose3Sec: () => recorder.request(),
+    cancelRecordPose: () => recorder.cancel(),
     resetSmoothing: () => {
       smoothing.initialized = false;
-    },
-    startLoop: () => requestAnimationFrame(tick)
+    }
   };
 }

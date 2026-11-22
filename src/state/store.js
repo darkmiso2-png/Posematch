@@ -1,10 +1,13 @@
+import { resolveInitialReference } from "../core/cameraHudLogic.js";
 import { validateCalibrationSkeleton } from "../core/calibrationLogic.js";
 import { cloneLandmarks } from "../core/poseMath.js";
 import { buildInitialPresets } from "../core/presetRenderer.js";
 import {
+  loadLastActiveReferenceId,
   loadSavedCalibrations,
   loadSettings,
   saveCalibrationsList,
+  saveLastActiveReferenceId,
   saveSettings,
   validateCalibrationName
 } from "../services/storageService.js";
@@ -13,18 +16,34 @@ import {
 const listeners = new Set();
 
 /** @type {import("../core/types.js").ScreenId} */
-let calibrationReturnScreen = "hub";
+let calibrationReturnScreen = "camera";
+
+/**
+ * @param {import("../core/types.js").PoseReference | null} ref
+ * @returns {import("../core/types.js").PoseReference | null}
+ */
+function cloneReference(ref) {
+  if (!ref) return null;
+  return {
+    ...ref,
+    landmarks: cloneLandmarks(ref.landmarks),
+    autoLandmarks: cloneLandmarks(ref.autoLandmarks)
+  };
+}
 
 const presets = buildInitialPresets();
 const savedCalibrations = loadSavedCalibrations();
+const initialActiveRef = cloneReference(
+  resolveInitialReference(presets, savedCalibrations, loadLastActiveReferenceId())
+);
 
 /** @type {import("../core/types.js").AppState} */
 const state = {
-  currentScreen: "hub",
+  currentScreen: "camera",
   activeFilter: "all",
   presets,
   savedCalibrations,
-  activeReference: presets[0] || null,
+  activeReference: initialActiveRef,
   draftCalibration: null,
   shots: [],
   selectedShotId: null,
@@ -85,12 +104,9 @@ export function setActiveFilter(filter) {
  * @returns {void}
  */
 export function setActiveReference(ref) {
-  state.activeReference = {
-    ...ref,
-    landmarks: cloneLandmarks(ref.landmarks),
-    autoLandmarks: cloneLandmarks(ref.autoLandmarks)
-  };
+  state.activeReference = cloneReference(ref);
   state.runtime.holdMs = 0;
+  saveLastActiveReferenceId(state.activeReference?.id || null);
   notify();
 }
 
@@ -102,11 +118,7 @@ export function openCalibrationDraft(ref) {
   if (state.currentScreen !== "calibration") {
     calibrationReturnScreen = state.currentScreen === "camera" ? "camera" : "hub";
   }
-  state.draftCalibration = {
-    ...ref,
-    landmarks: cloneLandmarks(ref.landmarks),
-    autoLandmarks: cloneLandmarks(ref.autoLandmarks)
-  };
+  state.draftCalibration = cloneReference(ref);
   state.currentScreen = "calibration";
   notify();
 }
@@ -174,6 +186,7 @@ export function commitCalibrationDraft(confirmedRef, saveToLibrary = true) {
   state.draftCalibration = null;
   state.runtime.holdMs = 0;
   state.currentScreen = "camera";
+  saveLastActiveReferenceId(clean.id);
   notify();
   return { ok: true, ref: clean };
 }
@@ -198,15 +211,9 @@ export function deleteSavedCalibration(id) {
   state.savedCalibrations = nextSaved;
 
   if (state.activeReference?.id === id) {
-    const fallback = state.presets[0] || null;
-    state.activeReference = fallback
-      ? {
-          ...fallback,
-          landmarks: cloneLandmarks(fallback.landmarks),
-          autoLandmarks: cloneLandmarks(fallback.autoLandmarks)
-        }
-      : null;
+    state.activeReference = cloneReference(state.presets[0] || null);
     state.runtime.holdMs = 0;
+    saveLastActiveReferenceId(state.activeReference?.id || null);
   }
 
   notify();
@@ -270,6 +277,22 @@ export function updateSettings(patch) {
  */
 export function updateRuntime(patch) {
   state.runtime = { ...state.runtime, ...patch };
+  notify();
+}
+
+/**
+ * Сброс эфемерного состояния камеры при паузе/выходе с экрана съемки.
+ * @returns {void}
+ */
+export function resetCameraRuntime() {
+  state.runtime = {
+    ...state.runtime,
+    cameraReady: false,
+    isRecordingPose: false,
+    countdownSec: 0,
+    holdMs: 0,
+    shutterCooldownMs: 0
+  };
   notify();
 }
 

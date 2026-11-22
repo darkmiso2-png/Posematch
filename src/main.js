@@ -1,7 +1,7 @@
 import { initPoseLandmarker } from "./services/mediapipeService.js";
 import { getState, subscribe, updateRuntime } from "./state/store.js";
 import { createCameraController } from "./ui/cameraController.js";
-import { applyActiveScreen } from "./ui/router.js";
+import { createScreenRouter } from "./ui/router.js";
 import { createCalibrationScreen } from "./ui/screens/calibrationScreen.js";
 import { createCameraScreen } from "./ui/screens/cameraScreen.js";
 import { createGalleryScreen } from "./ui/screens/galleryScreen.js";
@@ -26,6 +26,7 @@ const cameraView = createCameraScreen(screens.camera, {
   onRetryCamera: () => camController?.connectCamera(""),
   onManualShutter: () => camController?.takeManualShot(),
   onRecordPose: () => camController?.recordPose3Sec(),
+  onCancelRecordPose: () => camController?.cancelRecordPose(),
   onResetSmoothing: () => camController?.resetSmoothing()
 });
 
@@ -35,6 +36,15 @@ const hubView = createHubScreen(screens.hub, {
 });
 const calibView = createCalibrationScreen(screens.calibration);
 const galleryView = createGalleryScreen(screens.gallery);
+
+const routeToScreen = createScreenRouter(screens, {
+  onEnter: {
+    camera: () => camController?.activate()
+  },
+  onLeave: {
+    camera: () => camController?.deactivate()
+  }
+});
 
 /** @param {import("./core/types.js").AppState} state */
 function syncUI(state) {
@@ -46,13 +56,7 @@ function syncUI(state) {
   }
   mpText.textContent = state.runtime.mpMessage;
 
-  applyActiveScreen(screens, state.currentScreen, {
-    camera: () => {
-      if (!state.runtime.cameraReady && !state.runtime.cameraError) {
-        camController?.connectCamera();
-      }
-    }
-  });
+  routeToScreen(state.currentScreen);
 
   if (state.currentScreen === "hub") hubView.render(state);
   if (state.currentScreen === "calibration") calibView.render(state);
@@ -63,4 +67,3 @@ function syncUI(state) {
 subscribe(syncUI);
 syncUI(getState());
 initPoseLandmarker((mpStatus, mpMessage) => updateRuntime({ mpStatus, mpMessage }));
-camController.startLoop();

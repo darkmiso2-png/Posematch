@@ -148,6 +148,7 @@ function buildRenameForm(ref, editingError, handlers) {
  *   editingError: string,
  *   isBusy: boolean,
  *   onSelect: (ref: import("../../core/types.js").PoseReference) => void,
+ *   onCalibrate: (ref: import("../../core/types.js").PoseReference) => void,
  *   onStartRename: (ref: import("../../core/types.js").PoseReference) => void,
  *   onCancelRename: () => void,
  *   onSubmitRename: (id: string, nextName: string) => void,
@@ -218,10 +219,21 @@ export function renderHubGrid(container, params) {
       title.textContent = ref.name;
       card.appendChild(title);
 
-      if (ref.source === "custom") {
-        const actions = document.createElement("div");
-        actions.className = "hub-card-actions";
+      const actions = document.createElement("div");
+      actions.className = "hub-card-actions";
 
+      const btnCalib = document.createElement("button");
+      btnCalib.type = "button";
+      btnCalib.className = "hub-card-btn hub-card-btn--full";
+      btnCalib.textContent = "Калибровка";
+      btnCalib.disabled = isBusy;
+      btnCalib.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        params.onCalibrate(ref);
+      });
+      actions.appendChild(btnCalib);
+
+      if (ref.source === "custom") {
         const btnRename = document.createElement("button");
         btnRename.type = "button";
         btnRename.className = "hub-card-btn";
@@ -241,11 +253,16 @@ export function renderHubGrid(container, params) {
         });
 
         actions.append(btnRename, btnDelete);
-        card.appendChild(actions);
       }
 
-      card.addEventListener("click", () => params.onSelect(ref));
+      card.appendChild(actions);
+
+      card.addEventListener("click", (ev) => {
+        if (/** @type {HTMLElement} */ (ev.target).closest("button, form, input")) return;
+        params.onSelect(ref);
+      });
       card.addEventListener("keydown", (ev) => {
+        if (ev.target !== card) return;
         if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
           params.onSelect(ref);

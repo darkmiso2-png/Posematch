@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS } from "../core/constants.js";
 
 const CALIBRATIONS_KEY = "posematch_calibrations_v1";
 const SETTINGS_KEY = "posematch_settings_v1";
+const ACTIVE_REF_KEY = "posematch_active_ref_v1";
 export const CALIBRATION_NAME_MAX_LENGTH = 40;
 
 /**
@@ -117,5 +118,39 @@ export function saveSettings(settings) {
     storage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (err) {
     console.warn("Failed to save settings:", err);
+  }
+}
+
+/**
+ * Чтение последнего выбранного ID эталона.
+ * @returns {string | null}
+ */
+export function loadLastActiveReferenceId() {
+  const storage = getStorage();
+  if (!storage) return null;
+  try {
+    const id = storage.getItem(ACTIVE_REF_KEY);
+    return id && id.trim() ? id.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Сохранение ID последнего выбранного эталона.
+ * @param {string | null} id
+ * @returns {void}
+ */
+export function saveLastActiveReferenceId(id) {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    if (id) {
+      storage.setItem(ACTIVE_REF_KEY, id);
+    } else {
+      storage.removeItem(ACTIVE_REF_KEY);
+    }
+  } catch (err) {
+    console.warn("Failed to save active reference ID:", err);
   }
 }

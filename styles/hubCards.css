@@ -93,6 +93,9 @@
   border-color: rgba(255, 82, 82, 0.35);
   background: rgba(255, 82, 82, 0.08);
 }
+.hub-card-btn--full {
+  grid-column: 1 / -1;
+}
 
 .hub-rename-form {
   display: flex;

@@ -1,0 +1,232 @@
+.cam-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  background: rgba(0, 229, 255, 0.12);
+  color: #d6fbff;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.cam-notice--error {
+  border-color: rgba(255, 82, 82, 0.55);
+  background: rgba(255, 82, 82, 0.14);
+  color: #ffd5d5;
+}
+.cam-notice-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cam-notice-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.ref-mini-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  width: 82px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: rgba(11, 13, 18, 0.84);
+  color: var(--text-main);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.ref-mini-btn:hover {
+  border-color: var(--accent-cyan);
+}
+.ref-mini-canvas {
+  width: 72px;
+  height: 96px;
+  border-radius: 6px;
+  background: #05070b;
+  display: block;
+}
+.ref-mini-name {
+  width: 100%;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.hud-bar-col {
+  flex: 1;
+  min-width: 0;
+}
+.hud-hold-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.hud-hold-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent-green);
+  border-radius: 4px;
+  transition: width 60ms linear;
+}
+
+.cam-fallback-card {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 82, 82, 0.45);
+  background: rgba(11, 13, 18, 0.94);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+}
+.cam-fallback-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+.cam-fallback-msg {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.cam-fallback-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.countdown-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(6, 8, 13, 0.62);
+  z-index: 7;
+}
+.countdown-overlay.active {
+  display: flex;
+}
+.countdown-num {
+  font-size: 74px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent-cyan);
+}
+.countdown-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.cam-shutter-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.shutter-ring-btn {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-card);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.shutter-ring-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.shutter-ring-svg {
+  position: absolute;
+  inset: 0;
+  width: 68px;
+  height: 68px;
+  transform: rotate(-90deg);
+}
+.shutter-ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 4;
+}
+.shutter-ring-progress {
+  fill: none;
+  stroke: var(--accent-green);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 45ms linear;
+}
+.shutter-ring-core {
+  position: relative;
+  z-index: 1;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  color: #051018;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.shutter-ring-btn.is-holding .shutter-ring-core {
+  background: var(--accent-green);
+}
+
+.cam-threshold-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cam-threshold-slider {
+  width: 100%;
+}
+.hub-nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hub-nav-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
