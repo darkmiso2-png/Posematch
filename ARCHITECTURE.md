@@ -40,7 +40,7 @@
 - `src/services/pwaService.js` — безопасная неблокирующая регистрация `./sw.js` после загрузки страницы.
 - `src/services/mediapipeService.js` — загрузка и вызов MediaPipe PoseLandmarker (VIDEO Lite 0.5 и 3-шаговый каскад Lite 0.2 -> Heavy 0.2 -> Heavy + padded canvas для фото).
 - `src/services/cameraService.js` — доступ к камерам, пауза освобождения сенсора, `facingMode`-fallback, переключение устройств и захват чистого JPEG кадра.
-- `src/services/audioVoiceService.js` — прайминг TTS без пустой фразы, очередь `busy`/4с-сброс, watchdog 1500 мс, UI-коллбэк и Web Audio fallback.
+- `src/services/audioVoiceService.js` — защита `activeUtterance` от GC, синхронный жест-прайминг фразой `"Голос включён"`, приоритет `ru-RU`, очередь `busy`/4с-сброс, watchdog 1500 мс и Web Audio fallback.
 - `src/services/webAudioService.js` — Web Audio синтез: «Парктроник», щелчок затвора, тик отсчета и мягкий двухтоновый fallback-сигнал.
 - `src/services/storageService.js` — чтение/запись пользовательских калибровок и настроек в `localStorage`.
 - `src/state/store.js` — реактивный Store состояния `AppState` и экшены переходов.
@@ -64,4 +64,5 @@
 - `tests/galleryFeature.test.js` — юнит-тесты санитизации имени JPG, выбора/удаления дублей, разрешения эталона и экшенов Галереи в Store.
 - `tests/router.test.js` — юнит-тесты `createScreenRouter`, переходов `onEnter`/`onLeave` и защиты от реентрантного вызова.
 - `tests/pwaFeature.test.js` — юнит-тесты стратегий SW, фильтрации кэшей, валидности `manifest.webmanifest` и PNG-сигнатур/размеров иконок.
-- `tests/mobileHotfix.test.js` — юнит-тесты мобильного хотфикса: освобождение сенсора/fallback в `cameraService` и TTS watchdog/очередь/Web Audio fallback в `audioVoiceService`.
+- `tests/mobileHotfix.test.js` — юнит-тесты мобильного хотфикса BUG-M2: освобождение сенсора, пауза 150 мс и `facingMode`-fallback в `cameraService`.
+- `tests/audioVoiceHotfix.test.js` — юнит-тесты BUG-M3: удержание `activeUtterance` от GC, синхронный прайминг `"Голос включён"`, выбор `ru-RU`, watchdog 1500 мс и Web Audio fallback.

@@ -200,12 +200,13 @@ export function createCameraScreen(root, actions) {
     const next = !getState().settings.voice;
     if (next) {
       missingRuVoiceNotified = false;
-      const tts = primeSpeechSynthesis();
+      updateSettings({ voice: true });
+      const tts = primeSpeechSynthesis({ speakTest: true });
       if (!tts.supported || tts.missingRussianVoice) notifyMissingRuVoice();
     } else {
       cancelSpeech();
+      updateSettings({ voice: false });
     }
-    updateSettings({ voice: next });
   });
 
   /**
