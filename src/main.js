@@ -1,4 +1,5 @@
 import { initPoseLandmarker } from "./services/mediapipeService.js";
+import { registerPwaServiceWorker } from "./services/pwaService.js";
 import { getState, subscribe, updateRuntime } from "./state/store.js";
 import { createCameraController } from "./ui/cameraController.js";
 import { createScreenRouter } from "./ui/router.js";
@@ -68,3 +69,4 @@ function syncUI(state) {
 subscribe(syncUI);
 syncUI(getState());
 initPoseLandmarker((mpStatus, mpMessage) => updateRuntime({ mpStatus, mpMessage }));
+void registerPwaServiceWorker();

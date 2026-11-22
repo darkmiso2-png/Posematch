@@ -1,6 +1,13 @@
 # ARCHITECTURE.md — Карта проекта PoseMatch
 
-- `index.html` — точка входа, `<script type="importmap">` для `@mediapipe/tasks-vision`, 4-экранный Mobile-First каркас.
+- `index.html` — точка входа, PWA-мета-теги, `<script type="importmap">` для `@mediapipe/tasks-vision`, 4-экранный Mobile-First каркас.
+- `manifest.webmanifest` — Web App Manifest с относительными `./` путями, режимом `standalone` и иконками.
+- `sw.js` — Service Worker с версионируемым кэшем (`posematch-shell-v1`, `posematch-cdn-v1`), `Network-First` для приложения и `Cache-First` для MediaPipe CDN.
+- `icons/icon.svg` — векторная иконка и favicon PoseMatch.
+- `icons/icon-192.png` — бинарная PNG-иконка 192×192 (`purpose: "any"`).
+- `icons/icon-512.png` — бинарная PNG-иконка 512×512 (`purpose: "any"`).
+- `icons/icon-maskable-512.png` — бинарная PNG-иконка 512×512 с безопасной зоной (`purpose: "maskable"`).
+- `icons/apple-touch-icon.png` — непрозрачная PNG-иконка 180×180 для iOS Home Screen.
 - `package.json` — зависимости разработки, `@mediapipe/tasks-vision` (типы) и конвейер `npm run verify`.
 - `tsconfig.json` — проверка JSDoc-типов через `tsc --noEmit --allowJs --checkJs`.
 - `eslint.config.js` — правила линтинга для браузерных ES-модулей и тестов Vitest.
@@ -29,6 +36,8 @@
 - `src/core/poseAlignment.js` — расчет целевого скелета на экране (режим «К телу» и сглаживание).
 - `src/core/presetData.js` — данные и позы встроенных пресетов с категориями фильтрации.
 - `src/core/presetRenderer.js` — генерация PNG Data URL превью для встроенных пресетов.
+- `src/core/pwaLogic.js` — чистая логика PWA: классификация запросов SW, фильтрация устаревших кэшей и проверка условий регистрации.
+- `src/services/pwaService.js` — безопасная неблокирующая регистрация `./sw.js` после загрузки страницы.
 - `src/services/mediapipeService.js` — загрузка и вызов MediaPipe PoseLandmarker (GPU/CPU fallback).
 - `src/services/cameraService.js` — доступ к камерам, переключение устройств и захват чистого JPEG кадра.
 - `src/services/audioVoiceService.js` — Web Audio «Парктроник», звук затвора и русские голосовые подсказки.
@@ -53,3 +62,4 @@
 - `tests/cameraFeature.test.js` — юнит-тесты автозатвора 800 ms, отсчета 3-2-1, классификатора ошибок камеры и Camera-First Store.
 - `tests/galleryFeature.test.js` — юнит-тесты санитизации имени JPG, выбора/удаления дублей, разрешения эталона и экшенов Галереи в Store.
 - `tests/router.test.js` — юнит-тесты `createScreenRouter`, переходов `onEnter`/`onLeave` и защиты от реентрантного вызова.
+- `tests/pwaFeature.test.js` — юнит-тесты стратегий SW, фильтрации кэшей, валидности `manifest.webmanifest` и PNG-сигнатур/размеров иконок.

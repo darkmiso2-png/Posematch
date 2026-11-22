@@ -20,6 +20,24 @@ export default [
     }
   },
   {
+    files: ["sw.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: {
+        ...globals.serviceworker
+      }
+    },
+    rules: {
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      "no-undef": "error",
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+      "eqeqeq": ["error", "always"],
+      "prefer-const": "error",
+      "no-var": "error"
+    }
+  },
+  {
     files: ["tests/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,

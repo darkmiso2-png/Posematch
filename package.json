@@ -5,9 +5,9 @@
   "type": "module",
   "description": "PoseMatch AI pose assistant built with native ES modules",
   "scripts": {
-    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\" \"styles/**/*.css\" \"index.html\"",
-    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\" \"styles/**/*.css\" \"index.html\"",
-    "lint": "eslint src tests",
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\" \"styles/**/*.css\" \"sw.js\" \"index.html\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\" \"styles/**/*.css\" \"sw.js\" \"index.html\"",
+    "lint": "eslint src tests sw.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "deadcode": "knip",
