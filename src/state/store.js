@@ -1,3 +1,4 @@
+import { validateCalibrationSkeleton } from "../core/calibrationLogic.js";
 import { cloneLandmarks } from "../core/poseMath.js";
 import { buildInitialPresets } from "../core/presetRenderer.js";
 import {
@@ -10,6 +11,9 @@ import {
 
 /** @type {Set<(state: import("../core/types.js").AppState) => void>} */
 const listeners = new Set();
+
+/** @type {import("../core/types.js").ScreenId} */
+let calibrationReturnScreen = "hub";
 
 const presets = buildInitialPresets();
 const savedCalibrations = loadSavedCalibrations();
@@ -95,6 +99,9 @@ export function setActiveReference(ref) {
  * @returns {void}
  */
 export function openCalibrationDraft(ref) {
+  if (state.currentScreen !== "calibration") {
+    calibrationReturnScreen = state.currentScreen === "camera" ? "camera" : "hub";
+  }
   state.draftCalibration = {
     ...ref,
     landmarks: cloneLandmarks(ref.landmarks),
@@ -105,41 +112,70 @@ export function openCalibrationDraft(ref) {
 }
 
 /**
+ * Отменяет черновик калибровки без сохранения и возвращает на предыдущий экран.
+ * @returns {import("../core/types.js").ScreenId}
+ */
+export function cancelCalibrationDraft() {
+  state.draftCalibration = null;
+  const target = calibrationReturnScreen === "camera" ? "camera" : "hub";
+  state.currentScreen = target;
+  notify();
+  return target;
+}
+
+/**
+ * Подтверждение и сохранение калибровки (решение 2A: всегда сохраняет в localStorage,
+ * делает activeReference и переводит на экран camera).
  * @param {import("../core/types.js").PoseReference} confirmedRef
  * @param {boolean} [saveToLibrary]
- * @returns {boolean}
+ * @returns {{ ok: true, ref: import("../core/types.js").PoseReference } | { ok: false, error: string, quotaExceeded?: boolean }}
  */
-export function commitCalibrationDraft(confirmedRef, saveToLibrary = false) {
+export function commitCalibrationDraft(confirmedRef, saveToLibrary = true) {
+  const nameCheck = validateCalibrationName(confirmedRef.name);
+  if (!nameCheck.ok) {
+    return { ok: false, error: nameCheck.error };
+  }
+
+  const skelCheck = validateCalibrationSkeleton(confirmedRef.landmarks);
+  if (!skelCheck.ok) {
+    return { ok: false, error: skelCheck.error };
+  }
+
+  const isPreset = confirmedRef.source === "preset";
+  const nextId = isPreset
+    ? `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    : confirmedRef.id;
+
+  /** @type {import("../core/types.js").PoseReference} */
   const clean = {
     ...confirmedRef,
+    id: nextId,
+    name: nameCheck.name,
+    source: saveToLibrary ? "custom" : confirmedRef.source,
+    category: saveToLibrary ? "saved" : confirmedRef.category,
     landmarks: cloneLandmarks(confirmedRef.landmarks),
     autoLandmarks: cloneLandmarks(confirmedRef.autoLandmarks)
   };
-  state.activeReference = clean;
-  state.draftCalibration = null;
 
-  let savedOk = true;
   if (saveToLibrary) {
-    const customCopy = {
-      ...clean,
-      category: /** @type {const} */ ("saved"),
-      source: /** @type {const} */ ("custom")
-    };
-    const idx = state.savedCalibrations.findIndex((c) => c.id === customCopy.id);
+    const idx = state.savedCalibrations.findIndex((c) => c.id === clean.id);
     const nextSaved =
       idx >= 0
-        ? state.savedCalibrations.map((c, i) => (i === idx ? customCopy : c))
-        : [customCopy, ...state.savedCalibrations];
+        ? state.savedCalibrations.map((c, i) => (i === idx ? clean : c))
+        : [clean, ...state.savedCalibrations];
     const res = saveCalibrationsList(nextSaved);
-    savedOk = res.ok;
-    if (res.ok) {
-      state.savedCalibrations = nextSaved;
+    if (!res.ok) {
+      return { ok: false, error: res.error, quotaExceeded: res.quotaExceeded };
     }
+    state.savedCalibrations = nextSaved;
   }
 
+  state.activeReference = clean;
+  state.draftCalibration = null;
+  state.runtime.holdMs = 0;
   state.currentScreen = "camera";
   notify();
-  return savedOk;
+  return { ok: true, ref: clean };
 }
 
 /**

@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="./styles/layout.css" />
     <link rel="stylesheet" href="./styles/hub.css" />
     <link rel="stylesheet" href="./styles/hubCards.css" />
+    <link rel="stylesheet" href="./styles/calibration.css" />
     <script type="importmap">
       {
         "imports": {
@@ -92,22 +93,50 @@
       </section>
 
       <section id="screen-calibration" class="screen" hidden>
+        <div id="calib-notice" class="calib-notice" role="status" aria-live="polite" hidden>
+          <span id="calib-notice-text" class="calib-notice-text"></span>
+          <button
+            id="calib-notice-close"
+            class="calib-notice-close"
+            type="button"
+            aria-label="Закрыть уведомление"
+          >
+            ×
+          </button>
+        </div>
         <div id="calib-banner" class="status-pill">Калибровка позы</div>
         <div class="calib-canvas-wrap"><canvas id="calib-canvas"></canvas></div>
-        <p id="calib-info-label" class="muted-note">Перетащите сустав или 2×тап для вкл/выкл</p>
-        <div class="row-2">
-          <button id="calib-btn-restore" class="btn" type="button">Скрытые точки: 0</button>
-          <button id="calib-btn-reset" class="btn" type="button">Сброс</button>
+        <p id="calib-info-label" class="muted-note">
+          Перетащите сустав или 2×тап (ПКМ) для вкл/выкл
+        </p>
+        <div class="calib-hidden-box">
+          <div class="calib-hidden-head">
+            <span class="calib-hidden-title">
+              Скрытые точки (<span id="calib-hidden-count">0</span>)
+            </span>
+            <button id="calib-btn-restore-all" class="calib-restore-all" type="button" hidden>
+              Вернуть все
+            </button>
+          </div>
+          <div id="calib-hidden-chips" class="calib-hidden-chips"></div>
         </div>
         <div class="row-2">
           <button id="calib-btn-mirror" class="btn" type="button">Отзеркалить</button>
-          <label class="status-pill" style="justify-content: center">
-            <input id="calib-save-lib" type="checkbox" checked /> Сохранить
-          </label>
+          <button id="calib-btn-reset" class="btn" type="button">Сброс</button>
         </div>
+        <label class="calib-name-field">
+          <span class="calib-name-label">Название позы</span>
+          <input
+            id="calib-name-input"
+            class="calib-name-input"
+            type="text"
+            maxlength="40"
+            placeholder="Например: Портрет у окна"
+          />
+        </label>
         <div class="row-2">
           <button id="calib-btn-cancel" class="btn" type="button">Назад</button>
-          <button id="calib-btn-confirm" class="btn btn-primary" type="button">Подтвердить</button>
+          <button id="calib-btn-confirm" class="btn btn-primary" type="button">Сохранить</button>
         </div>
       </section>
 

@@ -144,11 +144,28 @@ export function drawStaticSkeleton(ctx, width, height, lms, color = "#00e5ff") {
  * @param {number} height
  * @param {import("../core/types.js").JointPoint[]} lms
  * @param {number} draggingIdx
+ * @param {boolean} [isMirrored]
  * @returns {number} Количество выключенных точек
  */
-export function drawCalibrationCanvas(ctx, img, width, height, lms, draggingIdx) {
+export function drawCalibrationCanvas(
+  ctx,
+  img,
+  width,
+  height,
+  lms,
+  draggingIdx,
+  isMirrored = false
+) {
   ctx.clearRect(0, 0, width, height);
-  ctx.drawImage(img, 0, 0, width, height);
+  if (isMirrored) {
+    ctx.save();
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 0, 0, width, height);
+    ctx.restore();
+  } else {
+    ctx.drawImage(img, 0, 0, width, height);
+  }
   ctx.fillStyle = "rgba(6, 8, 13, 0.25)";
   ctx.fillRect(0, 0, width, height);
 
@@ -179,19 +196,55 @@ export function drawCalibrationCanvas(ctx, img, width, height, lms, draggingIdx)
     ctx.stroke();
   }
 
-  ctx.setLineDash([]);
   let hiddenCount = 0;
+  /** @type {Array<{ x: number, y: number }>} */
+  const disabledMarkers = [];
   for (const idx of EDITABLE_JOINTS) {
     const p = lms[idx];
     const active = isJointActive(p);
-    if (!active) hiddenCount += 1;
+    const jx = p.x * width;
+    const jy = p.y * height;
+    if (!active) {
+      hiddenCount += 1;
+      disabledMarkers.push({ x: jx, y: jy });
+    }
+    if (active && draggingIdx === idx) {
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(jx, jy, 17, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0, 230, 118, 0.28)";
+      ctx.fill();
+    }
+    ctx.setLineDash(active ? [] : [3, 3]);
     ctx.beginPath();
-    ctx.arc(p.x * width, p.y * height, draggingIdx === idx ? 12 : 9, 0, Math.PI * 2);
-    ctx.fillStyle = active ? (draggingIdx === idx ? "#00e676" : "#00e5ff") : "rgba(30,36,48,0.85)";
+    ctx.arc(jx, jy, draggingIdx === idx ? 11 : 9, 0, Math.PI * 2);
+    ctx.fillStyle = active ? (draggingIdx === idx ? "#00e676" : "#00e5ff") : "rgba(30,36,48,0.82)";
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = active ? "#0b0d12" : "#9aa5b8";
     ctx.stroke();
+  }
+
+  ctx.setLineDash([]);
+  ctx.font = "600 10px Inter, Segoe UI, sans-serif";
+  ctx.textBaseline = "middle";
+  for (const m of disabledMarkers) {
+    const label = "Выкл.";
+    const padX = 5;
+    const boxW = ctx.measureText(label).width + padX * 2;
+    const boxH = 16;
+    const rawX = m.x + 11;
+    const boxX = rawX + boxW > width - 4 ? Math.max(4, m.x - boxW - 11) : rawX;
+    const boxY = Math.max(4, Math.min(height - boxH - 4, m.y - boxH * 0.5));
+    ctx.fillStyle = "rgba(11, 13, 18, 0.88)";
+    ctx.strokeStyle = "rgba(154, 165, 184, 0.65)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#f3f6fc";
+    ctx.fillText(label, boxX + padX, boxY + boxH * 0.5 + 0.5);
   }
   ctx.restore();
   return hiddenCount;

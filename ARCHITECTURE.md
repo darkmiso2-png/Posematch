@@ -15,9 +15,11 @@
 - `styles/layout.css` — Mobile-First разметка (`max-width: 480px`), компоненты и стили 4 экранов.
 - `styles/hub.css` — стили Экрана 1: dropzone загрузки, баннер уведомлений, фильтры и панель активного эталона.
 - `styles/hubCards.css` — стили сетки карточек Экрана 1, inline-переименования и Empty State.
+- `styles/calibration.css` — утилитарные стили Экрана 2: баннер уведомлений, чипсы скрытых точек и поле имени.
 - `src/main.js` — инициализация состояния, сервисов, роутера и запуск контроллера камеры.
 - `src/core/types.js` — централизованные JSDoc `@typedef` контракты из `SPEC.md`.
 - `src/core/constants.js` — константы MediaPipe, суставов, костей, порогов и таймингов.
+- `src/core/calibrationLogic.js` — чистая логика калибровки: координаты, hit-test, видимость, L/R зеркало, валидация скелета и жесты.
 - `src/core/poseMath.js` — чистая математика углов, координат, отзеркаливания и базовых скелетов.
 - `src/core/poseEvaluator.js` — оценка совпадения позы по углам сегментов и генерация подсказок.
 - `src/core/poseAlignment.js` — расчет целевого скелета на экране (режим «К телу» и сглаживание).
@@ -34,8 +36,10 @@
 - `src/ui/screens/hubScreen.js` — Экран 1: хаб пресетов, активный эталон, фильтры, быстрые действия и уведомления.
 - `src/ui/screens/hubCards.js` — Экран 1: безопасный DOM-рендер карточек, inline-переименования и Empty State.
 - `src/ui/screens/hubUpload.js` — Экран 1: загрузка фото (кнопка, Drag & Drop, Ctrl+V) с блокировкой и валидацией.
-- `src/ui/screens/calibrationScreen.js` — Экран 2: интерактивная калибровка суставов на `<canvas>`.
+- `src/ui/screens/calibrationScreen.js` — Экран 2: интерактивная калибровка суставов, синхронное зеркалирование и сохранение.
+- `src/ui/screens/calibrationViewHelpers.js` — Экран 2: запекание отзеркаленного фото, координаты Canvas и чипсы скрытых точек.
 - `src/ui/screens/cameraScreen.js` — Экран 3: видоискатель, автоспуск 800 ms, настройки 2x2 и 3-сек запись.
 - `src/ui/screens/galleryScreen.js` — Экран 4: сравнение Side-by-Side, лента дублей и скачивание фото.
 - `tests/poseMath.test.js` — юнит-тесты на математику углов, отзеркаливание, выравнивание и Edge Cases.
 - `tests/hubFeature.test.js` — юнит-тесты валидации имени калибровок, квоты `localStorage` и экшенов Store.
+- `tests/calibrationFeature.test.js` — юнит-тесты логики калибровки, жестов, валидации скелета и сохранения/отмены в Store.
