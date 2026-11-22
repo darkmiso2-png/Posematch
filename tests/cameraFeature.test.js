@@ -5,6 +5,7 @@ import {
   computeShutterRingProgress,
   createIdleCountdown,
   resolveInitialReference,
+  shouldMirrorCamera,
   startCountdown,
   stepAutoShutter,
   stepCountdown
@@ -165,131 +166,6 @@ describe("cameraHudLogic auto-shutter 800 ms + cooldown", () => {
       }
     );
     expect(notReady.holdMs).toBe(0);
-
-    describe("cameraHudLogic countdown 3-2-1 state machine", () => {
-      it("counts down 3 -> 2 -> 1 -> completed and supports cancellation", () => {
-        const idle = createIdleCountdown();
-        expect(idle.status).toBe("idle");
-
-        const cd = startCountdown(3);
-        expect(cd.status).toBe("running");
-        expect(cd.displaySec).toBe(3);
-
-        const step1 = stepCountdown(cd, 950);
-        expect(step1.tickChanged).toBe(false);
-        expect(step1.state.displaySec).toBe(3);
-
-        const step2 = stepCountdown(step1.state, 100);
-        expect(step2.tickChanged).toBe(true);
-        expect(step2.state.displaySec).toBe(2);
-
-        const step3 = stepCountdown(step2.state, 1000);
-        expect(step3.tickChanged).toBe(true);
-        expect(step3.state.displaySec).toBe(1);
-
-        const step4 = stepCountdown(step3.state, 1000);
-        expect(step4.finished).toBe(true);
-        expect(step4.state.status).toBe("completed");
-        expect(step4.state.displaySec).toBe(0);
-
-        const running = startCountdown(3);
-        const cancelled = cancelCountdown(running);
-        expect(cancelled.status).toBe("cancelled");
-        expect(cancelled.displaySec).toBe(0);
-        expect(stepCountdown(cancelled, 500).finished).toBe(false);
-      });
-    });
-
-    describe("cameraHudLogic error classifier and initial reference", () => {
-      it("classifies all camera access/hardware failure modes", () => {
-        expect(classifyCameraError(null, true, false)).toMatchObject({
-          code: "insecure",
-          canRetry: false
-        });
-        expect(classifyCameraError(null, false, true)).toMatchObject({
-          code: "unsupported",
-          canRetry: false
-        });
-        expect(classifyCameraError({ name: "NotAllowedError" })).toMatchObject({
-          code: "permission",
-          canRetry: true
-        });
-        expect(classifyCameraError({ name: "NotFoundError" })).toMatchObject({
-          code: "not_found",
-          canRetry: true
-        });
-        expect(classifyCameraError({ name: "NotReadableError" })).toMatchObject({
-          code: "busy",
-          canRetry: true
-        });
-        expect(classifyCameraError({ name: "WeirdError", message: "boom" })).toMatchObject({
-          code: "unknown",
-          canRetry: true
-        });
-      });
-
-      it("resolves initial reference from lastActiveId or falls back to presets[0]", () => {
-        const p1 = makeRef("p1", "Пресет 1");
-        const p2 = makeRef("p2", "Пресет 2");
-        const c1 = makeRef("c1", "Моя поза");
-        expect(resolveInitialReference([p1, p2], [c1], "c1")?.id).toBe("c1");
-        expect(resolveInitialReference([p1, p2], [c1], "p2")?.id).toBe("p2");
-        expect(resolveInitialReference([p1, p2], [c1], "missing")?.id).toBe("p1");
-        expect(resolveInitialReference([], [], null)).toBeNull();
-      });
-    });
-
-    describe("Camera-First v2 store and screen router lifecycle", () => {
-      beforeEach(() => {
-        vi.stubGlobal("localStorage", createMockStorage());
-      });
-
-      afterEach(() => {
-        cancelCalibrationDraft();
-        navigateTo("camera");
-        vi.unstubAllGlobals();
-      });
-
-      it("starts on camera screen with activeReference and persists lastActiveReferenceId", () => {
-        const st = getState();
-        expect(st.currentScreen).toBe("camera");
-        expect(st.activeReference).not.toBeNull();
-
-        const secondPreset = st.presets[1];
-        setActiveReference(secondPreset);
-        expect(getState().activeReference?.id).toBe(secondPreset.id);
-        expect(loadLastActiveReferenceId()).toBe(secondPreset.id);
-
-        saveLastActiveReferenceId(null);
-        expect(loadLastActiveReferenceId()).toBeNull();
-
-        resetCameraRuntime();
-        expect(getState().runtime.cameraReady).toBe(false);
-        expect(getState().runtime.holdMs).toBe(0);
-      });
-
-      it("tracks shots count and returns from calibration back to camera", () => {
-        navigateTo("camera");
-        const ref = /** @type {import("../src/core/types.js").PoseReference} */ (
-          getState().activeReference
-        );
-        const beforeShots = getState().shots.length;
-        addCapturedShot({
-          id: "shot-test-1",
-          referenceId: ref.id,
-          imageDataUrl: "data:image/jpeg;base64,AAA",
-          score: 91,
-          userLandmarks: null,
-          refLandmarks: null,
-          createdAt: Date.now()
-        });
-        expect(getState().shots.length).toBe(beforeShots + 1);
-
-        openCalibrationDraft(ref);
-        expect(getState().currentScreen).toBe("calibration");
-        expect(cancelCalibrationDraft()).toBe("camera");
-      });
-    });
   });
 
   it("computes SVG strokeDashoffset from holdMs progress", () => {
@@ -304,5 +180,139 @@ describe("cameraHudLogic auto-shutter 800 ms + cooldown", () => {
     const full = computeShutterRingProgress(1000, 800, 28);
     expect(full.percent).toBe(100);
     expect(full.dashOffset).toBeCloseTo(0, 4);
+  });
+});
+
+describe("cameraHudLogic countdown 3-2-1 state machine", () => {
+  it("counts down 3 -> 2 -> 1 -> completed and supports cancellation", () => {
+    const idle = createIdleCountdown();
+    expect(idle.status).toBe("idle");
+
+    const cd = startCountdown(3);
+    expect(cd.status).toBe("running");
+    expect(cd.displaySec).toBe(3);
+
+    const step1 = stepCountdown(cd, 950);
+    expect(step1.tickChanged).toBe(false);
+    expect(step1.state.displaySec).toBe(3);
+
+    const step2 = stepCountdown(step1.state, 100);
+    expect(step2.tickChanged).toBe(true);
+    expect(step2.state.displaySec).toBe(2);
+
+    const step3 = stepCountdown(step2.state, 1000);
+    expect(step3.tickChanged).toBe(true);
+    expect(step3.state.displaySec).toBe(1);
+
+    const step4 = stepCountdown(step3.state, 1000);
+    expect(step4.finished).toBe(true);
+    expect(step4.state.status).toBe("completed");
+    expect(step4.state.displaySec).toBe(0);
+
+    const running = startCountdown(3);
+    const cancelled = cancelCountdown(running);
+    expect(cancelled.status).toBe("cancelled");
+    expect(cancelled.displaySec).toBe(0);
+    expect(stepCountdown(cancelled, 500).finished).toBe(false);
+  });
+});
+
+describe("cameraHudLogic error classifier, mirroring and initial reference", () => {
+  it("classifies all camera access/hardware failure modes", () => {
+    expect(classifyCameraError(null, true, false)).toMatchObject({
+      code: "insecure",
+      canRetry: false
+    });
+    expect(classifyCameraError(null, false, true)).toMatchObject({
+      code: "unsupported",
+      canRetry: false
+    });
+    expect(classifyCameraError({ name: "NotAllowedError" })).toMatchObject({
+      code: "permission",
+      canRetry: true
+    });
+    expect(classifyCameraError({ name: "NotFoundError" })).toMatchObject({
+      code: "not_found",
+      canRetry: true
+    });
+    expect(classifyCameraError({ name: "NotReadableError" })).toMatchObject({
+      code: "busy",
+      canRetry: true
+    });
+    expect(classifyCameraError({ name: "WeirdError", message: "boom" })).toMatchObject({
+      code: "unknown",
+      canRetry: true
+    });
+  });
+
+  it("mirrors front/desktop cameras and disables mirroring for rear environment camera", () => {
+    expect(shouldMirrorCamera("user")).toBe(true);
+    expect(shouldMirrorCamera("environment")).toBe(false);
+    expect(shouldMirrorCamera("")).toBe(true);
+    expect(shouldMirrorCamera(undefined, "Back Camera")).toBe(false);
+    expect(shouldMirrorCamera("", "Rear Wide Lens")).toBe(false);
+    expect(shouldMirrorCamera("", "Front FaceTime HD")).toBe(true);
+  });
+
+  it("resolves initial reference from lastActiveId or falls back to presets[0]", () => {
+    const p1 = makeRef("p1", "Пресет 1");
+    const p2 = makeRef("p2", "Пресет 2");
+    const c1 = makeRef("c1", "Моя поза");
+    expect(resolveInitialReference([p1, p2], [c1], "c1")?.id).toBe("c1");
+    expect(resolveInitialReference([p1, p2], [c1], "p2")?.id).toBe("p2");
+    expect(resolveInitialReference([p1, p2], [c1], "missing")?.id).toBe("p1");
+    expect(resolveInitialReference([], [], null)).toBeNull();
+  });
+});
+
+describe("Camera-First v2 store and screen router lifecycle", () => {
+  beforeEach(() => {
+    vi.stubGlobal("localStorage", createMockStorage());
+  });
+
+  afterEach(() => {
+    cancelCalibrationDraft();
+    navigateTo("camera");
+    vi.unstubAllGlobals();
+  });
+
+  it("starts on camera screen with activeReference and persists lastActiveReferenceId", () => {
+    const st = getState();
+    expect(st.currentScreen).toBe("camera");
+    expect(st.activeReference).not.toBeNull();
+
+    const secondPreset = st.presets[1];
+    setActiveReference(secondPreset);
+    expect(getState().activeReference?.id).toBe(secondPreset.id);
+    expect(loadLastActiveReferenceId()).toBe(secondPreset.id);
+
+    saveLastActiveReferenceId(null);
+    expect(loadLastActiveReferenceId()).toBeNull();
+
+    resetCameraRuntime();
+    expect(getState().runtime.cameraReady).toBe(false);
+    expect(getState().runtime.holdMs).toBe(0);
+  });
+
+  it("tracks shots count and returns from calibration back to camera", () => {
+    navigateTo("camera");
+    const ref = /** @type {import("../src/core/types.js").PoseReference} */ (
+      getState().activeReference
+    );
+    const beforeShots = getState().shots.length;
+    addCapturedShot({
+      id: "shot-test-1",
+      referenceId: ref.id,
+      imageDataUrl: "data:image/jpeg;base64,AAA",
+      score: 91,
+      userLandmarks: null,
+      refLandmarks: null,
+      createdAt: Date.now()
+    });
+    expect(getState().shots.length).toBe(beforeShots + 1);
+
+    openCalibrationDraft(ref);
+    expect(getState().currentScreen).toBe("calibration");
+    expect(cancelCalibrationDraft()).toBe("camera");
   });
 });

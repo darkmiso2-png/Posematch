@@ -8,13 +8,14 @@ import { POSE_RECORD_SECONDS } from "../core/constants.js";
 import { cloneLandmarks, getMirroredCopy } from "../core/poseMath.js";
 import { playCountdownTick, playShutterSound } from "../services/audioVoiceService.js";
 import { captureVideoFrame } from "../services/cameraService.js";
-import { getState, openCalibrationDraft, updateRuntime } from "../state/store.js";
+import { openCalibrationDraft, updateRuntime } from "../state/store.js";
 
 /**
  * Контроллер 3-секундной записи эталонной позы с камеры.
  * @param {{
  *   cameraView: ReturnType<import("./screens/cameraScreen.js").createCameraScreen>,
  *   isStreamReady: () => boolean,
+ *   isCameraMirrored: () => boolean,
  *   ensureConnect: () => void,
  *   getUserLandmarks: () => import("../core/types.js").JointPoint[] | null
  * }} deps
@@ -57,7 +58,7 @@ export function createPoseRecorder(deps) {
     }
 
     const { video } = deps.cameraView;
-    const mirrored = getState().settings.mirrorRef;
+    const mirrored = deps.isCameraMirrored();
     const dataUrl = captureVideoFrame(video, mirrored, "image/jpeg", 0.9);
     if (!dataUrl) return;
 

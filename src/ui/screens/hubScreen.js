@@ -1,3 +1,4 @@
+import { ensureAudioContext } from "../../services/audioVoiceService.js";
 import {
   deleteSavedCalibration,
   getState,
@@ -70,6 +71,7 @@ export function createHubScreen(root, actions) {
     uploadStatusText.textContent = message;
     btnUpload.disabled = busy;
     btnRecord.disabled = busy;
+    btnGallery.disabled = busy;
     const hasRef = Boolean(getState().activeReference);
     btnShoot.disabled = busy || !hasRef;
     btnCalib.disabled = busy || !hasRef;
@@ -102,6 +104,7 @@ export function createHubScreen(root, actions) {
 
   function startRecordPose() {
     if (uploader.isBusy()) return;
+    ensureAudioContext();
     navigateTo("camera");
     actions.onStartRecordPose();
   }
@@ -118,7 +121,9 @@ export function createHubScreen(root, actions) {
     const active = getState().activeReference;
     if (active) openCalibrationDraft(active);
   });
-  btnGallery.addEventListener("click", () => navigateTo("gallery"));
+  btnGallery.addEventListener("click", () => {
+    if (!uploader.isBusy()) navigateTo("gallery");
+  });
 
   /** @param {import("../../core/types.js").AppState} state */
   function render(state) {
@@ -142,6 +147,7 @@ export function createHubScreen(root, actions) {
 
     btnShoot.disabled = busy || !state.activeReference;
     btnCalib.disabled = busy || !state.activeReference;
+    btnGallery.disabled = busy;
 
     filterRow.querySelectorAll("[data-filter]").forEach((el) => {
       const btn = /** @type {HTMLElement} */ (el);

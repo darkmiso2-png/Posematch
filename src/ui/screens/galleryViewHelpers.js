@@ -14,7 +14,11 @@ export function dataUrlToBlob(dataUrl) {
 
   const mime = header.split(";")[0] || "image/jpeg";
   if (!header.includes(";base64")) {
-    return new Blob([decodeURIComponent(payload)], { type: mime });
+    try {
+      return new Blob([decodeURIComponent(payload)], { type: mime });
+    } catch {
+      return null;
+    }
   }
 
   try {

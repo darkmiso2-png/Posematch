@@ -219,14 +219,3 @@
 .cam-threshold-slider {
   width: 100%;
 }
-.hub-nav-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.hub-nav-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-main);
-}

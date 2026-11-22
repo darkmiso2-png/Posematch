@@ -240,7 +240,11 @@ export function drawCalibrationCanvas(
     ctx.strokeStyle = "rgba(154, 165, 184, 0.65)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, 6);
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(boxX, boxY, boxW, boxH, 6);
+    } else {
+      ctx.rect(boxX, boxY, boxW, boxH);
+    }
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "#f3f6fc";

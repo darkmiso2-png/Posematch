@@ -257,3 +257,17 @@ export function cancelCountdown(state) {
     durationMs: state.durationMs
   };
 }
+
+/**
+ * Определяет, нужно ли зеркалить превью и захваченный кадр камеры.
+ * Фронтальная камера (user) и веб-камеры ПК зеркалятся, тыловая (environment) — нет.
+ * @param {string | null | undefined} facingMode
+ * @param {string} [deviceLabel]
+ * @returns {boolean}
+ */
+export function shouldMirrorCamera(facingMode, deviceLabel = "") {
+  if (facingMode === "environment") return false;
+  if (facingMode === "user") return true;
+  if (!facingMode && /\b(back|rear|environment)\b/i.test(deviceLabel)) return false;
+  return true;
+}

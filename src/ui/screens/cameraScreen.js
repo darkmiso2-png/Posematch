@@ -60,7 +60,11 @@ export function createCameraScreen(root, actions) {
   ringProgress.style.strokeDasharray = `${ringBase.circumference.toFixed(2)}`;
   ringProgress.style.strokeDashoffset = `${ringBase.dashOffset.toFixed(2)}`;
 
-  let lastThumbKey = "";
+  /** @type {import("../../core/types.js").PoseReference | null} */
+  let lastThumbRef = null;
+  /** @type {boolean | null} */
+  let lastThumbMirrored = null;
+  let thumbLoadSeq = 0;
   /** @type {import("../../core/cameraHudLogic.js").CameraErrorInfo | null} */
   let cameraErrorInfo = null;
 
@@ -79,32 +83,49 @@ export function createCameraScreen(root, actions) {
     noticeText.textContent = "";
   }
 
+  /** @param {boolean} mirrored */
+  function setCameraMirrored(mirrored) {
+    video.classList.toggle("is-mirrored", mirrored);
+    overlayCanvas.classList.toggle("is-mirrored", mirrored);
+  }
+
   /** @param {import("../../core/types.js").AppState} state */
   function renderThumbnail(state) {
     const ref = state.activeReference;
     if (!ref) {
+      lastThumbRef = null;
+      lastThumbMirrored = null;
+      thumbLoadSeq += 1;
       miniNameEl.textContent = "Нет эталона";
       miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
       return;
     }
     miniNameEl.textContent = ref.name;
-    const key = `${ref.id}-${state.settings.mirrorRef}-${ref.landmarks[0]?.x}-${ref.landmarks[11]?.x}`;
-    if (key === lastThumbKey) return;
-    lastThumbKey = key;
+    const mirrorRef = state.settings.mirrorRef;
+    if (ref === lastThumbRef && mirrorRef === lastThumbMirrored) return;
+    lastThumbRef = ref;
+    lastThumbMirrored = mirrorRef;
+    const seq = ++thumbLoadSeq;
 
     const img = new Image();
     img.onload = () => {
+      if (seq !== thumbLoadSeq) return;
       const { width: W, height: H } = miniCanvas;
       miniCtx.clearRect(0, 0, W, H);
       miniCtx.save();
-      if (state.settings.mirrorRef) {
+      if (mirrorRef) {
         miniCtx.translate(W, 0);
         miniCtx.scale(-1, 1);
       }
       miniCtx.drawImage(img, 0, 0, W, H);
       miniCtx.restore();
-      const lms = state.settings.mirrorRef ? getMirroredCopy(ref.landmarks) : ref.landmarks;
+      const lms = mirrorRef ? getMirroredCopy(ref.landmarks) : ref.landmarks;
       drawStaticSkeleton(miniCtx, W, H, lms);
+    };
+    img.onerror = () => {
+      if (seq !== thumbLoadSeq) return;
+      lastThumbRef = null;
+      miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
     };
     img.src = ref.imageDataUrl;
   }
@@ -243,6 +264,7 @@ export function createCameraScreen(root, actions) {
     overlayCanvas,
     render,
     setCameraList,
+    setCameraMirrored,
     setCameraErrorInfo,
     showNotice,
     clearNotice,

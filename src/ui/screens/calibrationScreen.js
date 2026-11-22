@@ -47,6 +47,7 @@ export function createCalibrationScreen(root) {
   /** @type {HTMLImageElement | null} */
   let loadedImg = null;
   let loadedSrc = "";
+  let imageLoadSeq = 0;
   /** @type {import("../../core/types.js").PoseReference | null} */
   let activeDraftObj = null;
   let isMirrored = false;
@@ -122,6 +123,7 @@ export function createCalibrationScreen(root) {
   noticeClose.addEventListener("click", clearNotice);
 
   canvas.addEventListener("pointerdown", (e) => {
+    if (activePointerId !== null) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     const draft = getState().draftCalibration;
     if (!draft) return;
@@ -135,7 +137,11 @@ export function createCalibrationScreen(root) {
     pressedJointIdx = idx;
     pressStartPos = pos;
     isDragging = false;
-    canvas.setPointerCapture(e.pointerId);
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // Игнорируем отказ capture на некоторых мобильных браузерах
+    }
     draw();
   });
 
@@ -308,15 +314,22 @@ export function createCalibrationScreen(root) {
     if (loadedSrc !== draft.imageDataUrl) {
       loadedSrc = draft.imageDataUrl;
       loadedImg = null;
+      const seq = ++imageLoadSeq;
       const img = new Image();
       img.onload = () => {
+        if (seq !== imageLoadSeq) return;
         loadedImg = img;
-        const scale = Math.min(1, 360 / (img.naturalWidth || 360));
-        canvas.width = Math.round((img.naturalWidth || 360) * scale);
-        canvas.height = Math.round((img.naturalHeight || 480) * scale);
+        const nw = img.naturalWidth || 360;
+        const nh = img.naturalHeight || 480;
+        const scale = Math.min(1, 360 / nw, 460 / nh);
+        canvas.width = Math.round(nw * scale);
+        canvas.height = Math.round(nh * scale);
         draw();
       };
       img.onerror = () => {
+        if (seq !== imageLoadSeq) return;
+        loadedSrc = "";
+        loadedImg = null;
         showNotice("Не удалось загрузить изображение эталона для калибровки.", "error");
       };
       img.src = draft.imageDataUrl;

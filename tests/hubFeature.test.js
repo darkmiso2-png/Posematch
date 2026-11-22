@@ -3,6 +3,7 @@ import { createDefaultSkeleton } from "../src/core/poseMath.js";
 import {
   CALIBRATION_NAME_MAX_LENGTH,
   loadSavedCalibrations,
+  loadSettings,
   saveCalibrationsList,
   validateCalibrationName
 } from "../src/services/storageService.js";
@@ -120,6 +121,75 @@ describe("storageService quota handling", () => {
     const loaded = loadSavedCalibrations();
     expect(loaded).toHaveLength(1);
     expect(loaded[0].name).toBe("Стойка");
+  });
+
+  it("filters corrupted calibration records and malformed JSON safely", () => {
+    const storage = createMockStorage(false);
+    vi.stubGlobal("localStorage", storage);
+
+    storage.setItem("posematch_calibrations_v1", "{broken-json");
+    expect(loadSavedCalibrations()).toEqual([]);
+
+    const valid = makeCustomRef("c-valid", "Валидная");
+    const missingAuto = { ...makeCustomRef("c-no-auto", "Без авто"), autoLandmarks: "bad" };
+    const corruptedEntries = [
+      null,
+      {},
+      {
+        id: "bad-lm",
+        name: "Битый скелет",
+        imageDataUrl: "data:image/png;base64,A",
+        landmarks: []
+      },
+      {
+        id: "bad-url",
+        name: "Плохой URL",
+        imageDataUrl: "javascript:alert(1)",
+        landmarks: createDefaultSkeleton()
+      },
+      {
+        id: "nan-pt",
+        name: "NaN точка",
+        imageDataUrl: "data:image/png;base64,A",
+        landmarks: createDefaultSkeleton().map((p, i) => (i === 0 ? { x: "bad", y: 0.5 } : p))
+      },
+      valid,
+      missingAuto
+    ];
+    storage.setItem("posematch_calibrations_v1", JSON.stringify(corruptedEntries));
+
+    const loaded = loadSavedCalibrations();
+    expect(loaded).toHaveLength(2);
+    expect(loaded[0].id).toBe("c-valid");
+    expect(loaded[1].id).toBe("c-no-auto");
+    expect(loaded[1].autoLandmarks).toHaveLength(33);
+  });
+
+  it("sanitizes invalid types and out-of-range values in loadSettings", () => {
+    const storage = createMockStorage(false);
+    vi.stubGlobal("localStorage", storage);
+
+    storage.setItem("posematch_settings_v1", "[1,2,3]");
+    expect(loadSettings().threshold).toBe(80);
+
+    storage.setItem(
+      "posematch_settings_v1",
+      JSON.stringify({
+        attachToBody: "yes",
+        mirrorRef: true,
+        parktronic: false,
+        voice: 123,
+        threshold: 999,
+        activeDeviceId: 42
+      })
+    );
+    const s = loadSettings();
+    expect(s.attachToBody).toBe(true);
+    expect(s.mirrorRef).toBe(true);
+    expect(s.parktronic).toBe(false);
+    expect(s.voice).toBe(false);
+    expect(s.threshold).toBe(95);
+    expect(s.activeDeviceId).toBe("");
   });
 });
 

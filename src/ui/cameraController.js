@@ -1,4 +1,4 @@
-import { stepAutoShutter } from "../core/cameraHudLogic.js";
+import { shouldMirrorCamera, stepAutoShutter } from "../core/cameraHudLogic.js";
 import { SHUTTER_COOLDOWN_MS } from "../core/constants.js";
 import { createSmoothingState } from "../core/poseAlignment.js";
 import { evaluatePose } from "../core/poseEvaluator.js";
@@ -41,6 +41,7 @@ export function createCameraController(cameraView) {
 
   let isActive = false;
   let rafId = 0;
+  let mirrorCamera = true;
 
   /** @type {Promise<void> | null} */
   let connectPromise = null;
@@ -70,6 +71,7 @@ export function createCameraController(cameraView) {
   const recorder = createPoseRecorder({
     cameraView,
     isStreamReady: isVideoStreamReady,
+    isCameraMirrored: () => mirrorCamera,
     ensureConnect: () => {
       if (!connectPromise && !getState().runtime.cameraError) {
         connectCamera();
@@ -77,6 +79,19 @@ export function createCameraController(cameraView) {
     },
     getUserLandmarks: () => userLandmarks
   });
+
+  function handleTrackEnded() {
+    if (!isActive || getState().currentScreen !== "camera") return;
+    userLandmarks = null;
+    lastVideoTime = -1;
+    clearOverlayCanvas();
+    if (typeof document !== "undefined" && document.hidden) {
+      deactivate();
+      return;
+    }
+    updateRuntime({ cameraReady: false, cameraError: null });
+    void connectCamera();
+  }
 
   /** @param {string} [deviceId] */
   function connectCamera(deviceId = getState().settings.activeDeviceId) {
@@ -86,8 +101,9 @@ export function createCameraController(cameraView) {
 
     const task = (async () => {
       cameraView.setCameraErrorInfo(null);
-      const res = await startCameraStream(cameraView.video, deviceId);
-      if (res.aborted || !isActive || getState().currentScreen !== "camera") {
+      const res = await startCameraStream(cameraView.video, deviceId, handleTrackEnded);
+      if (res.aborted) return;
+      if (!isActive || getState().currentScreen !== "camera") {
         stopCameraStream(cameraView.video);
         return;
       }
@@ -96,6 +112,8 @@ export function createCameraController(cameraView) {
       updateRuntime({ cameraReady: res.ok, cameraError: res.error });
 
       if (res.ok) {
+        mirrorCamera = shouldMirrorCamera(res.facingMode, res.deviceLabel);
+        cameraView.setCameraMirrored(mirrorCamera);
         if (res.deviceId !== getState().settings.activeDeviceId) {
           updateSettings({ activeDeviceId: res.deviceId });
         }
@@ -110,7 +128,10 @@ export function createCameraController(cameraView) {
         cameraView.updateHud(0, "Камера не активна", 0);
       }
     })().finally(() => {
-      if (connectPromise === task) connectPromise = null;
+      if (connectPromise === task) {
+        connectPromise = null;
+        connectingDeviceId = "";
+      }
     });
 
     connectPromise = task;
@@ -123,7 +144,7 @@ export function createCameraController(cameraView) {
     const st = getState();
     if (!st.activeReference) return;
 
-    const dataUrl = captureVideoFrame(cameraView.video, true, "image/jpeg", 0.92);
+    const dataUrl = captureVideoFrame(cameraView.video, mirrorCamera, "image/jpeg", 0.92);
     if (!dataUrl) return;
 
     playShutterSound();
@@ -140,7 +161,11 @@ export function createCameraController(cameraView) {
       refMirrored: st.settings.mirrorRef,
       imageDataUrl: dataUrl,
       score,
-      userLandmarks: userLandmarks ? getMirroredCopy(userLandmarks) : null,
+      userLandmarks: userLandmarks
+        ? mirrorCamera
+          ? getMirroredCopy(userLandmarks)
+          : cloneLandmarks(userLandmarks)
+        : null,
       refLandmarks: refLms,
       createdAt: Date.now()
     });

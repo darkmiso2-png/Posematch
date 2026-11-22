@@ -5,10 +5,21 @@
   flex-shrink: 0;
 }
 .hub-dropzone-head,
-.hub-active-info,
-.hub-rename-form {
+.hub-active-info {
   display: flex;
   flex-direction: column;
+}
+
+.hub-nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hub-nav-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
 }
 
 .hub-notice {

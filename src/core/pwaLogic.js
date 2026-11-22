@@ -93,12 +93,15 @@ export function getObsoleteCacheNames(cacheNames) {
 }
 
 /**
- * Проверяет допустимость кэширования ответа.
- * @param {number} status
+ * Проверяет допустимость кэширования HTTP-ответа (без редиректов и opaque-ответов).
+ * @param {{ status: number, redirected?: boolean, type?: string } | null | undefined} response
  * @returns {boolean}
  */
-export function isCacheableResponse(status) {
-  return status === 200;
+export function isCacheableResponse(response) {
+  if (!response || response.status !== 200 || response.redirected) {
+    return false;
+  }
+  return response.type === "basic" || response.type === "cors";
 }
 
 /**

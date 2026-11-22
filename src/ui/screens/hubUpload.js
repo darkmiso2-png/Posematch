@@ -1,3 +1,4 @@
+import { createDefaultSkeleton } from "../../core/poseMath.js";
 import { loadImageFile } from "../../services/cameraService.js";
 import { detectPoseOnImage } from "../../services/mediapipeService.js";
 import { validateCalibrationName } from "../../services/storageService.js";
@@ -42,20 +43,18 @@ export function bindHubUpload(opts) {
       onBusyChange(true, "Анализ позы на фото...");
       const detected = await detectPoseOnImage(img);
 
-      if (!detected) {
-        const mpStatus = getState().runtime.mpStatus;
-        if (mpStatus === "loading") {
-          onNotice(
-            "Нейросеть ещё загружается. Дождитесь готовности ИИ и повторите загрузку фото.",
-            "info"
-          );
-        } else if (mpStatus === "error") {
-          onNotice("Движок ИИ не загружен — не удалось распознать позу на фото.", "error");
-        } else {
-          onNotice("Человек не найден на фото. Выберите снимок, где фигура видна четче.", "error");
-        }
+      if (getState().currentScreen !== "hub") return;
+
+      if (!detected && getState().runtime.mpStatus === "loading") {
+        onNotice(
+          "Нейросеть ещё загружается. Дождитесь готовности ИИ и повторите загрузку фото.",
+          "info"
+        );
         return;
       }
+
+      const landmarks = detected || createDefaultSkeleton();
+      const autoDetected = Boolean(detected);
 
       const rawName =
         "name" in file && file.name ? file.name.replace(/\.[^.]+$/, "") : "Фото-референс";
@@ -69,9 +68,9 @@ export function bindHubUpload(opts) {
         category: "saved",
         imageDataUrl: dataUrl,
         aspect,
-        landmarks: detected,
-        autoLandmarks: detected,
-        autoDetected: true,
+        landmarks,
+        autoLandmarks: landmarks,
+        autoDetected,
         createdAt: Date.now()
       });
     } catch (err) {

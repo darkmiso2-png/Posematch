@@ -2,6 +2,8 @@ import { classifyCameraError } from "../core/cameraHudLogic.js";
 
 /** @type {MediaStream | null} */
 let activeStream = null;
+/** @type {(() => void) | null} */
+let activeTrackCleanup = null;
 let streamRequestId = 0;
 
 /**
@@ -21,6 +23,10 @@ export async function listVideoDevices() {
  */
 export function stopCameraStream(videoEl = null) {
   streamRequestId += 1;
+  if (activeTrackCleanup) {
+    activeTrackCleanup();
+    activeTrackCleanup = null;
+  }
   if (activeStream) {
     activeStream.getTracks().forEach((t) => t.stop());
     activeStream = null;
@@ -36,6 +42,8 @@ export function stopCameraStream(videoEl = null) {
  * @property {boolean} ok
  * @property {boolean} [aborted]
  * @property {string} deviceId
+ * @property {string} facingMode
+ * @property {string} deviceLabel
  * @property {string | null} error
  * @property {import("../core/cameraHudLogic.js").CameraErrorInfo | null} [errorInfo]
  */
@@ -45,9 +53,10 @@ export function stopCameraStream(videoEl = null) {
  * При устаревшем deviceId (OverconstrainedError/NotFoundError) автоматически пробует камеру по умолчанию.
  * @param {HTMLVideoElement} videoEl
  * @param {string} [deviceId]
+ * @param {() => void} [onTrackEnded]
  * @returns {Promise<StartCameraResult>}
  */
-export async function startCameraStream(videoEl, deviceId = "") {
+export async function startCameraStream(videoEl, deviceId = "", onTrackEnded) {
   stopCameraStream(videoEl);
   const reqId = ++streamRequestId;
 
@@ -55,7 +64,14 @@ export async function startCameraStream(videoEl, deviceId = "") {
   const hasMediaDevices = Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   if (!isSecure || !hasMediaDevices) {
     const info = classifyCameraError(null, hasMediaDevices, isSecure);
-    return { ok: false, deviceId: "", error: info.message, errorInfo: info };
+    return {
+      ok: false,
+      deviceId: "",
+      facingMode: "",
+      deviceLabel: "",
+      error: info.message,
+      errorInfo: info
+    };
   }
 
   /** @param {string} targetId */
@@ -91,28 +107,76 @@ export async function startCameraStream(videoEl, deviceId = "") {
 
     if (reqId !== streamRequestId) {
       stream.getTracks().forEach((t) => t.stop());
-      return { ok: false, aborted: true, deviceId: "", error: null, errorInfo: null };
+      return {
+        ok: false,
+        aborted: true,
+        deviceId: "",
+        facingMode: "",
+        deviceLabel: "",
+        error: null,
+        errorInfo: null
+      };
     }
 
     activeStream = stream;
     const track = stream.getVideoTracks()[0];
-    const actualId = track?.getSettings?.().deviceId || "";
+    const trackSettings = track?.getSettings?.();
+    const actualId = trackSettings?.deviceId || "";
+    const facingMode =
+      typeof trackSettings?.facingMode === "string" ? trackSettings.facingMode : "";
+    const deviceLabel = track?.label || "";
+
+    if (track && onTrackEnded) {
+      const handleEnded = () => {
+        if (reqId !== streamRequestId || activeStream !== stream) return;
+        activeTrackCleanup = null;
+        activeStream = null;
+        onTrackEnded();
+      };
+      track.addEventListener("ended", handleEnded, { once: true });
+      activeTrackCleanup = () => track.removeEventListener("ended", handleEnded);
+    }
 
     videoEl.srcObject = stream;
     await videoEl.play();
     if (reqId !== streamRequestId) {
-      stopCameraStream(videoEl);
-      return { ok: false, aborted: true, deviceId: "", error: null, errorInfo: null };
+      stream.getTracks().forEach((t) => t.stop());
+      return {
+        ok: false,
+        aborted: true,
+        deviceId: "",
+        facingMode: "",
+        deviceLabel: "",
+        error: null,
+        errorInfo: null
+      };
     }
-    return { ok: true, deviceId: actualId, error: null, errorInfo: null };
+    return {
+      ok: true,
+      deviceId: actualId,
+      facingMode,
+      deviceLabel,
+      error: null,
+      errorInfo: null
+    };
   } catch (err) {
     if (reqId !== streamRequestId) {
-      return { ok: false, aborted: true, deviceId: "", error: null, errorInfo: null };
+      return {
+        ok: false,
+        aborted: true,
+        deviceId: "",
+        facingMode: "",
+        deviceLabel: "",
+        error: null,
+        errorInfo: null
+      };
     }
     const info = classifyCameraError(err, hasMediaDevices, isSecure);
     return {
       ok: false,
       deviceId: "",
+      facingMode: "",
+      deviceLabel: "",
       error: info.message,
       errorInfo: info
     };

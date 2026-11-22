@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0b0d12" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="PoseMatch" />
     <title>PoseMatch</title>
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -170,8 +170,8 @@
         </div>
 
         <div class="viewport-box">
-          <video id="webcam" autoplay playsinline muted></video>
-          <canvas id="overlay-canvas"></canvas>
+          <video id="webcam" class="is-mirrored" autoplay playsinline muted></video>
+          <canvas id="overlay-canvas" class="is-mirrored"></canvas>
 
           <button
             id="ref-mini-btn"

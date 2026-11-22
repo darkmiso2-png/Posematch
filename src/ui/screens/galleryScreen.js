@@ -48,7 +48,21 @@ export function createGalleryScreen(root) {
   /** @type {string | null} */
   let lastRenderedShotId = null;
   let preserveDeleteNotice = false;
+  let activeDownloadUrl = "";
+  let downloadRevokeTimer = 0;
   const drawPane = createGalleryPaneRenderer();
+
+  function revokeActiveDownloadUrl() {
+    if (downloadRevokeTimer) {
+      window.clearTimeout(downloadRevokeTimer);
+      downloadRevokeTimer = 0;
+    }
+    if (activeDownloadUrl) {
+      URL.revokeObjectURL(activeDownloadUrl);
+      activeDownloadUrl = "";
+    }
+  }
+  window.addEventListener("pagehide", revokeActiveDownloadUrl);
 
   /**
    * @param {string} text
@@ -99,6 +113,7 @@ export function createGalleryScreen(root) {
       return;
     }
 
+    revokeActiveDownloadUrl();
     const objectUrl = blob ? URL.createObjectURL(blob) : "";
     const href = objectUrl || currentShot.imageDataUrl;
     const link = document.createElement("a");
@@ -110,7 +125,8 @@ export function createGalleryScreen(root) {
     link.remove();
 
     if (objectUrl) {
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      activeDownloadUrl = objectUrl;
+      downloadRevokeTimer = window.setTimeout(revokeActiveDownloadUrl, 60_000);
     }
     showNotice(`Файл ${filename} скачан`, "info");
   });

@@ -3,6 +3,7 @@ import { clamp } from "../core/poseMath.js";
 
 /** @type {AudioContext | null} */
 let audioCtx = null;
+let unlockInstalled = false;
 let lastBeepTime = 0;
 let lastVoiceTime = 0;
 
@@ -26,7 +27,21 @@ export function ensureAudioContext() {
 }
 
 /**
+ * Одноразовая разблокировка AudioContext по первому жесту pointerdown (Autoplay Policy).
+ * @returns {void}
+ */
+export function installAudioUnlockListener() {
+  if (unlockInstalled || typeof window === "undefined") return;
+  unlockInstalled = true;
+  window.addEventListener("pointerdown", () => ensureAudioContext(), {
+    once: true,
+    passive: true
+  });
+}
+
+/**
  * Звуковой «Парктроник»: частота и частота пиков растут с ростом процента совпадения.
+ * Не создает и не разблокирует AudioContext без жеста пользователя.
  * @param {number} score
  * @param {number} threshold
  * @param {boolean} enabled
@@ -35,13 +50,13 @@ export function ensureAudioContext() {
  */
 export function playParktronicBeep(score, threshold, enabled, now) {
   if (!enabled || score < 35) return;
+  if (!audioCtx || audioCtx.state !== "running") return;
   const t = clamp((score - 35) / 65, 0, 1);
   const interval = 950 - t * 830;
   if (now - lastBeepTime < interval) return;
   lastBeepTime = now;
 
-  const ctx = ensureAudioContext();
-  if (!ctx || ctx.state !== "running") return;
+  const ctx = audioCtx;
 
   const freq = 380 + t * 770;
   const osc = ctx.createOscillator();
@@ -131,18 +146,29 @@ export function playCountdownTick() {
  * @returns {void}
  */
 export function speakRussianHint(text, enabled, now, intervalMs = VOICE_COOLDOWN_MS) {
-  if (!enabled || !text || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (
+    !enabled ||
+    !text ||
+    typeof window === "undefined" ||
+    !("speechSynthesis" in window) ||
+    typeof SpeechSynthesisUtterance === "undefined"
+  ) {
+    return;
+  }
   if (now - lastVoiceTime < intervalMs) return;
-  if (window.speechSynthesis.speaking) return;
-
-  lastVoiceTime = now;
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = "ru-RU";
-  utt.rate = 1.05;
-  const voices = window.speechSynthesis.getVoices();
-  const ruVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("ru"));
-  if (ruVoice) utt.voice = ruVoice;
-  window.speechSynthesis.speak(utt);
+  try {
+    if (window.speechSynthesis.speaking) return;
+    lastVoiceTime = now;
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = "ru-RU";
+    utt.rate = 1.05;
+    const voices = window.speechSynthesis.getVoices();
+    const ruVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("ru"));
+    if (ruVoice) utt.voice = ruVoice;
+    window.speechSynthesis.speak(utt);
+  } catch (err) {
+    console.warn("SpeechSynthesis skipped:", err);
+  }
 }
 
 /**

@@ -33,7 +33,7 @@ async function precacheShell() {
     await Promise.allSettled(
       PRECACHE_URLS.map(async (url) => {
         const response = await fetch(new Request(url, { cache: "reload" }));
-        if (isCacheableResponse(response.status)) {
+        if (isCacheableResponse(response)) {
           await cache.put(url, response.clone());
         }
       })
@@ -52,7 +52,7 @@ async function precacheShell() {
 async function handleNetworkFirst(request, cacheName) {
   try {
     const networkResponse = await fetch(request);
-    if (isCacheableResponse(networkResponse.status)) {
+    if (isCacheableResponse(networkResponse)) {
       await safeCachePut(cacheName, request, networkResponse.clone());
     }
     return networkResponse;
@@ -85,7 +85,7 @@ async function handleCacheFirst(request, cacheName) {
     return cached;
   }
   const networkResponse = await fetch(request);
-  if (isCacheableResponse(networkResponse.status)) {
+  if (isCacheableResponse(networkResponse)) {
     await safeCachePut(cacheName, request, networkResponse.clone());
   }
   return networkResponse;

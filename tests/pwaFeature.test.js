@@ -91,11 +91,15 @@ describe("pwaLogic: request classification & cache management", () => {
     expect(getObsoleteCacheNames(names)).toEqual(["posematch-shell-v0", "posematch-cdn-v0"]);
   });
 
-  it("caches only HTTP 200 responses", () => {
-    expect(isCacheableResponse(200)).toBe(true);
-    expect(isCacheableResponse(206)).toBe(false);
-    expect(isCacheableResponse(404)).toBe(false);
-    expect(isCacheableResponse(0)).toBe(false);
+  it("caches only non-redirected basic/cors HTTP 200 responses", () => {
+    expect(isCacheableResponse({ status: 200, redirected: false, type: "basic" })).toBe(true);
+    expect(isCacheableResponse({ status: 200, redirected: false, type: "cors" })).toBe(true);
+    expect(isCacheableResponse({ status: 200, redirected: true, type: "basic" })).toBe(false);
+    expect(isCacheableResponse({ status: 200, redirected: false, type: "opaque" })).toBe(false);
+    expect(isCacheableResponse({ status: 206, redirected: false, type: "basic" })).toBe(false);
+    expect(isCacheableResponse({ status: 404, redirected: false, type: "basic" })).toBe(false);
+    expect(isCacheableResponse({ status: 0, redirected: false, type: "opaque" })).toBe(false);
+    expect(isCacheableResponse(null)).toBe(false);
   });
 
   it("allows SW registration only in secure context on https or localhost/127.0.0.1", () => {

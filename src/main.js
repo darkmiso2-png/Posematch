@@ -1,3 +1,4 @@
+import { installAudioUnlockListener } from "./services/audioVoiceService.js";
 import { initPoseLandmarker } from "./services/mediapipeService.js";
 import { registerPwaServiceWorker } from "./services/pwaService.js";
 import { getState, subscribe, updateRuntime } from "./state/store.js";
@@ -68,5 +69,19 @@ function syncUI(state) {
 
 subscribe(syncUI);
 syncUI(getState());
+installAudioUnlockListener();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    camController?.deactivate();
+  } else if (getState().currentScreen === "camera") {
+    camController?.activate();
+  }
+});
+
+window.addEventListener("pagehide", () => {
+  camController?.deactivate();
+});
+
 initPoseLandmarker((mpStatus, mpMessage) => updateRuntime({ mpStatus, mpMessage }));
 void registerPwaServiceWorker();
