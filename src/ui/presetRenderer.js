@@ -1,9 +1,9 @@
-import { cloneLandmarks } from "./poseMath.js";
-import { PRESET_DEFINITIONS } from "./presetData.js";
+import { cloneLandmarks } from "../core/poseMath.js";
+import { PRESET_DEFINITIONS } from "../core/presetData.js";
 
 /**
  * Генерация стилизованного изображения-превью для встроенного пресета.
- * @param {import("./types.js").PresetDefinition} preset
+ * @param {import("../core/types.js").PresetDefinition} preset
  * @returns {string}
  */
 function renderPresetDataUrl(preset) {
@@ -85,7 +85,7 @@ function renderPresetDataUrl(preset) {
 
 /**
  * Создание списка PoseReference из встроенных пресетов.
- * @returns {import("./types.js").PoseReference[]}
+ * @returns {import("../core/types.js").PoseReference[]}
  */
 export function buildInitialPresets() {
   const now = Date.now();

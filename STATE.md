@@ -1,7 +1,7 @@
 # STATE.md — Текущее состояние проекта PoseMatch
 
 ## Текущий этап
-**Этап 4: Полевое QA на смартфоне и релиз `v1.0.0`** — Этап 3 (`Adversarial Review` и рефакторинг) ЗАВЕРШЕН. Все блокеры P0, дефекты P1 и гигиена P2 закрыты, `npm run verify` проходит чисто с кодом `0`. Следующая задача: **деплой на GitHub Pages и полевое QA на реальных смартфонах (Android Chrome / iOS Safari) перед релизом `v1.0.0`**.
+**Итерация v1.1 — Задача 1.1 выполнена** — начат рефакторинг и визуально-функциональные улучшения `v1.1` (после завершения Этапов 0–3 и мобильных хотфиксов `v1.0.0`). Выполнена **Задача 1.1** (чистый рефакторинг: вынесен `src/ui/cameraFrameProcessor.js` из `src/ui/cameraController.js`, перенесен `src/core/presetRenderer.js` → `src/ui/presetRenderer.js`). Следующая задача: **следующая задача линейки `v1.1` (либо полевое QA на смартфоне)** согласно дорожной карте.
 
 ## Выполненные этапы
 - [x] **Этап 0: Валидация ядра (0 -> 1)** — создан однофайловый прототип `index.html` с MediaPipe GPU/CPU fallback, математикой углов скелета, режимом «К телу», отзеркаливанием, Web Audio «Парктроник», голосовыми подсказками, ручной калибровкой и захватом кадра.
@@ -23,6 +23,9 @@
 - [x] **Этап 3:** Кросс-ревью и рефакторинг (Adversarial Review) — закрыты P0 (`visibilitychange`/`pagehide`/`track.onended`, гонка `res.aborted`, запрет кэширования редиректов/opaque в SW), P1 (валидация `localStorage`, fallback `createDefaultSkeleton` в `hubUpload`, сквозной `mirrorCamera` для тыловой камеры и записи 3с, `revokeObjectURL` на `pagehide`/60s, `seq`-защита `img.onload`, Autoplay Policy для `AudioContext` + защита `speechSynthesis`, тач-фиксы калибровки, починка вложенных `describe` в `cameraFeature.test.js` + новые тесты) и P2 (`knip.json`, чистка мертвого CSS, `roundRect` fallback, `status-bar-style="black"`, `try/catch` в `dataUrlToBlob`).
 - [x] **Мобильный хотфикс (BUG-M2, BUG-M3, BUG-M1b):** освобождение сенсора Android-камеры (пауза 150 мс, снятие `ended`, `facingMode`-fallback) и скрытие `.hud-bar` при ошибке; защита `activeUtterance` от GC Android Chrome, синхронный прайминг TTS фразой `"Голос включён"` при клике «Голос» + `voiceschanged` и приоритет `ru-RU`, явные параметры `Utterance`, защита от обрыва речи (`busy` < 4000 мс), watchdog 1500 мс / `onerror` с UI-уведомлением и двухтоновым Web Audio fallback (`webAudioService.js`); каскад `Lite 0.2` -> `Heavy 0.2` -> `Heavy` на padded-холсте 15% с фильтром и обратным маппингом координат.
 - [ ] **Этап 4:** Полевое QA на смартфоне и релиз `v1.0.0`.
+
+## Задачи v1.1 (рефакторинг и визуально-функциональные улучшения)
+- [x] **Задача 1.1 (чистый рефакторинг):** разгружен `src/ui/cameraController.js` (349 → 177 строк) за счет выноса `src/ui/cameraFrameProcessor.js` (213 строк); перенесен `src/core/presetRenderer.js` → `src/ui/presetRenderer.js` (104 строки) с обновлением импортов. Без изменения поведения и контрактов; `npm run verify` (67/67) зеленый.
 
 ## Продуктовые решения по дорожной карте
 - Спринт визуального редизайна перенесен в бэклог **`v1.1`**. Текущая дорожная карта до релиза `v1.0.0`: **Этап 2 (завершен, Фичи 2.1–2.5)** -> **Этап 3 (завершен, Adversarial Review)** -> **Этап 4 (Деплой на GitHub Pages, полевое QA на смартфоне и релиз v1.0.0)**.

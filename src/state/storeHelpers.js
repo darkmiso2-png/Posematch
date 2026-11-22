@@ -1,6 +1,6 @@
 import { resolveInitialReference } from "../core/cameraHudLogic.js";
 import { cloneLandmarks } from "../core/poseMath.js";
-import { buildInitialPresets } from "../core/presetRenderer.js";
+import { buildInitialPresets } from "../ui/presetRenderer.js";
 import {
   loadLastActiveReferenceId,
   loadSavedCalibrations,

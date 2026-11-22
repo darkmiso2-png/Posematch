@@ -35,7 +35,6 @@
 - `src/core/poseEvaluator.js` — оценка совпадения позы по углам сегментов и генерация подсказок.
 - `src/core/poseAlignment.js` — расчет целевого скелета на экране (режим «К телу» и сглаживание).
 - `src/core/presetData.js` — данные и позы встроенных пресетов с категориями фильтрации.
-- `src/core/presetRenderer.js` — генерация PNG Data URL превью для встроенных пресетов.
 - `src/core/pwaLogic.js` — чистая логика PWA: классификация запросов SW, фильтрация устаревших кэшей и проверка условий регистрации.
 - `src/services/pwaService.js` — безопасная неблокирующая регистрация `./sw.js` после загрузки страницы.
 - `src/services/mediapipeService.js` — загрузка и вызов MediaPipe PoseLandmarker (VIDEO Lite 0.5 и 3-шаговый каскад Lite 0.2 -> Heavy 0.2 -> Heavy + padded canvas для фото).
@@ -46,9 +45,11 @@
 - `src/state/store.js` — реактивный Store состояния `AppState` и экшены переходов.
 - `src/state/storeHelpers.js` — вспомогательные функции инициализации, клонирования и сборки калибровки для `store.js`.
 - `src/ui/router.js` — переключение видимости 4 экранов и жизненный цикл `onEnter` / `onLeave`.
-- `src/ui/cameraController.js` — цикл анализа кадров, автозатвор 800 ms, пауза/возобновление камеры и защита от гонок.
+- `src/ui/cameraController.js` — жизненный цикл видеопотока, пауза/возобновление камеры, защита от гонок и координация записи позы.
+- `src/ui/cameraFrameProcessor.js` — покадровая детекция позы, отрисовка оверлея, автозатвор 800 ms, аудио-обратная связь и захват снимка.
 - `src/ui/cameraPoseRecorder.js` — контроллер 3-секундного отсчета и записи эталонной позы с камеры.
 - `src/ui/overlayRenderer.js` — отрисовка скелета эталона, пользователя и холста калибровки на `<canvas>`.
+- `src/ui/presetRenderer.js` — генерация PNG Data URL превью для встроенных пресетов.
 - `src/ui/screens/hubScreen.js` — Экран 1: хаб пресетов, активный эталон, фильтры, быстрые действия и уведомления.
 - `src/ui/screens/hubCards.js` — Экран 1: безопасный DOM-рендер карточек, inline-переименования и Empty State.
 - `src/ui/screens/hubUpload.js` — Экран 1: загрузка фото (кнопка, Drag & Drop, Ctrl+V) с блокировкой и валидацией.

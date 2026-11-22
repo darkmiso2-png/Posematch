@@ -1,44 +1,22 @@
-import { shouldMirrorCamera, stepAutoShutter } from "../core/cameraHudLogic.js";
+import { shouldMirrorCamera } from "../core/cameraHudLogic.js";
 import { SHUTTER_COOLDOWN_MS } from "../core/constants.js";
-import { createSmoothingState } from "../core/poseAlignment.js";
-import { evaluatePose } from "../core/poseEvaluator.js";
-import { cloneLandmarks, getMirroredCopy } from "../core/poseMath.js";
+import { cancelSpeech } from "../services/audioVoiceService.js";
 import {
-  cancelSpeech,
-  playParktronicBeep,
-  playShutterSound,
-  speakRussianHint
-} from "../services/audioVoiceService.js";
-import {
-  captureVideoFrame,
   listVideoDevices,
   startCameraStream,
   stopCameraStream
 } from "../services/cameraService.js";
-import { detectPoseOnVideo } from "../services/mediapipeService.js";
-import {
-  addCapturedShot,
-  getState,
-  resetCameraRuntime,
-  updateRuntime,
-  updateSettings
-} from "../state/store.js";
+import { getState, resetCameraRuntime, updateRuntime, updateSettings } from "../state/store.js";
+import { createCameraFrameProcessor } from "./cameraFrameProcessor.js";
 import { createPoseRecorder } from "./cameraPoseRecorder.js";
-import { drawStageOverlay } from "./overlayRenderer.js";
 
 /**
- * Контроллер видеопотока, автозатвора (800 ms), паузы/возобновления и записи позы 3 сек.
+ * Контроллер видеопотока, жизненного цикла камеры и координации записи позы 3 сек.
  * @param {ReturnType<import("./screens/cameraScreen.js").createCameraScreen>} cameraView
  */
 export function createCameraController(cameraView) {
-  const smoothing = createSmoothingState();
-  /** @type {import("../core/types.js").JointPoint[] | null} */
-  let userLandmarks = null;
-  let lastVideoTime = -1;
-  let lastTimestamp = 0;
+  const frameProcessor = createCameraFrameProcessor(cameraView);
   let lastFrameTime = performance.now();
-  let lastScore = 0;
-
   let isActive = false;
   let rafId = 0;
   let mirrorCamera = true;
@@ -60,14 +38,6 @@ export function createCameraController(cameraView) {
     );
   }
 
-  function clearOverlayCanvas() {
-    const c = cameraView.overlayCanvas;
-    const ctx = c.getContext("2d");
-    if (ctx && c.width && c.height) {
-      ctx.clearRect(0, 0, c.width, c.height);
-    }
-  }
-
   const recorder = createPoseRecorder({
     cameraView,
     isStreamReady: isVideoStreamReady,
@@ -77,14 +47,12 @@ export function createCameraController(cameraView) {
         connectCamera();
       }
     },
-    getUserLandmarks: () => userLandmarks
+    getUserLandmarks: frameProcessor.getUserLandmarks
   });
 
   function handleTrackEnded() {
     if (!isActive || getState().currentScreen !== "camera") return;
-    userLandmarks = null;
-    lastVideoTime = -1;
-    clearOverlayCanvas();
+    frameProcessor.clearDetectionState();
     if (typeof document !== "undefined" && document.hidden) {
       deactivate();
       return;
@@ -123,8 +91,7 @@ export function createCameraController(cameraView) {
         }
       } else {
         recorder.clearPending();
-        userLandmarks = null;
-        clearOverlayCanvas();
+        frameProcessor.clearDetectionState();
         cameraView.updateHud(0, "Камера не активна", 0);
       }
     })().finally(() => {
@@ -138,39 +105,6 @@ export function createCameraController(cameraView) {
     return task;
   }
 
-  /** @param {number} score */
-  function takeShot(score) {
-    if (!isVideoStreamReady()) return;
-    const st = getState();
-    if (!st.activeReference) return;
-
-    const dataUrl = captureVideoFrame(cameraView.video, mirrorCamera, "image/jpeg", 0.92);
-    if (!dataUrl) return;
-
-    playShutterSound();
-    cameraView.triggerFlash();
-    const refLms = st.settings.mirrorRef
-      ? getMirroredCopy(st.activeReference.landmarks)
-      : cloneLandmarks(st.activeReference.landmarks);
-
-    addCapturedShot({
-      id: `shot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      referenceId: st.activeReference.id,
-      referenceName: st.activeReference.name,
-      referenceImageDataUrl: st.activeReference.imageDataUrl,
-      refMirrored: st.settings.mirrorRef,
-      imageDataUrl: dataUrl,
-      score,
-      userLandmarks: userLandmarks
-        ? mirrorCamera
-          ? getMirroredCopy(userLandmarks)
-          : cloneLandmarks(userLandmarks)
-        : null,
-      refLandmarks: refLms,
-      createdAt: Date.now()
-    });
-  }
-
   /** @param {number} now */
   function tick(now) {
     if (!isActive) return;
@@ -182,112 +116,7 @@ export function createCameraController(cameraView) {
     if (st.currentScreen === "camera") {
       recorder.step(dt);
       if (!isActive) return;
-
-      const v = cameraView.video;
-      const c = cameraView.overlayCanvas;
-      if (
-        v.videoWidth &&
-        v.videoHeight &&
-        (c.width !== v.videoWidth || c.height !== v.videoHeight)
-      ) {
-        c.width = v.videoWidth;
-        c.height = v.videoHeight;
-      }
-
-      if (v.videoWidth > 0 && v.readyState >= 2 && v.currentTime !== lastVideoTime) {
-        lastVideoTime = v.currentTime;
-        lastTimestamp = Math.max(lastTimestamp + 1, Math.round(now));
-        userLandmarks = detectPoseOnVideo(v, lastTimestamp);
-      }
-
-      const ref = st.activeReference;
-      const refLms = ref
-        ? st.settings.mirrorRef
-          ? getMirroredCopy(ref.landmarks)
-          : ref.landmarks
-        : null;
-      const ctx = c.getContext("2d");
-      const streamReady = isVideoStreamReady();
-
-      if (ctx && refLms && ref && streamReady) {
-        if (userLandmarks) {
-          const va = v.videoWidth / v.videoHeight;
-          const ev = evaluatePose(userLandmarks, refLms, va, ref.aspect);
-          lastScore = ev.totalScore;
-          drawStageOverlay(
-            ctx,
-            c.width,
-            c.height,
-            userLandmarks,
-            refLms,
-            ref.aspect,
-            st.settings.attachToBody,
-            smoothing,
-            ev
-          );
-
-          const shutterStep = stepAutoShutter(
-            { holdMs: st.runtime.holdMs, cooldownMs: st.runtime.shutterCooldownMs },
-            {
-              dtMs: dt,
-              hasPose: true,
-              score: ev.totalScore,
-              threshold: st.settings.threshold,
-              isRecording: st.runtime.isRecordingPose,
-              cameraReady: streamReady
-            }
-          );
-          st.runtime.holdMs = shutterStep.holdMs;
-          st.runtime.shutterCooldownMs = shutterStep.cooldownMs;
-
-          if (shutterStep.shouldShoot) {
-            takeShot(ev.totalScore);
-          }
-
-          const above = ev.totalScore >= st.settings.threshold;
-          const hint = above
-            ? st.runtime.shutterCooldownMs > 0
-              ? "Снимок сохранён!"
-              : "Удерживайте позу..."
-            : ev.worstHint;
-          cameraView.updateHud(ev.totalScore, hint, st.runtime.holdMs);
-          playParktronicBeep(ev.totalScore, st.settings.threshold, st.settings.parktronic, now);
-          if (!above && !st.runtime.isRecordingPose && st.runtime.shutterCooldownMs <= 0) {
-            const voiceRes = speakRussianHint(ev.worstHint, st.settings.voice, now);
-            if (voiceRes.reason === "no_russian_voice") {
-              cameraView.notifyMissingRuVoice();
-            }
-          }
-        } else {
-          lastScore = 0;
-          const resetStep = stepAutoShutter(
-            { holdMs: st.runtime.holdMs, cooldownMs: st.runtime.shutterCooldownMs },
-            {
-              dtMs: dt,
-              hasPose: false,
-              score: 0,
-              threshold: st.settings.threshold,
-              isRecording: st.runtime.isRecordingPose,
-              cameraReady: streamReady
-            }
-          );
-          st.runtime.holdMs = resetStep.holdMs;
-          st.runtime.shutterCooldownMs = resetStep.cooldownMs;
-
-          drawStageOverlay(
-            ctx,
-            c.width,
-            c.height,
-            null,
-            refLms,
-            ref.aspect,
-            st.settings.attachToBody,
-            smoothing,
-            null
-          );
-          cameraView.updateHud(0, "Встаньте в кадр", 0);
-        }
-      }
+      frameProcessor.processFrame(dt, now, isVideoStreamReady(), mirrorCamera);
     }
 
     if (isActive) {
@@ -298,10 +127,7 @@ export function createCameraController(cameraView) {
   function activate() {
     if (isActive) return;
     isActive = true;
-    lastVideoTime = -1;
-    lastScore = 0;
-    userLandmarks = null;
-    smoothing.initialized = false;
+    frameProcessor.resetForSession();
     lastFrameTime = performance.now();
     cameraView.updateHud(0, "Встаньте в кадр", 0);
     connectCamera();
@@ -318,10 +144,8 @@ export function createCameraController(cameraView) {
     recorder.cancel();
     cancelSpeech();
     stopCameraStream(cameraView.video);
-    userLandmarks = null;
-    lastVideoTime = -1;
-    lastScore = 0;
-    clearOverlayCanvas();
+    frameProcessor.resetForSession();
+    frameProcessor.clearOverlay();
     cameraView.updateHud(0, "Камера на паузе", 0);
     resetCameraRuntime();
   }
@@ -331,8 +155,9 @@ export function createCameraController(cameraView) {
     const st = getState();
     st.runtime.holdMs = 0;
     st.runtime.shutterCooldownMs = SHUTTER_COOLDOWN_MS;
-    takeShot(lastScore);
-    cameraView.updateHud(lastScore, "Снимок сохранён!", 0);
+    const score = frameProcessor.getLastScore();
+    frameProcessor.takeShot(score, mirrorCamera);
+    cameraView.updateHud(score, "Снимок сохранён!", 0);
   }
 
   return {
@@ -342,8 +167,6 @@ export function createCameraController(cameraView) {
     takeManualShot,
     recordPose3Sec: () => recorder.request(),
     cancelRecordPose: () => recorder.cancel(),
-    resetSmoothing: () => {
-      smoothing.initialized = false;
-    }
+    resetSmoothing: frameProcessor.resetSmoothing
   };
 }
