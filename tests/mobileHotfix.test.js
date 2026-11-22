@@ -3,6 +3,7 @@ import { inferFacingModeFromDevice } from "../src/core/cameraHudLogic.js";
 import {
   cancelSpeech,
   primeSpeechSynthesis,
+  setSpeechUnavailableHandler,
   speakRussianHint
 } from "../src/services/audioVoiceService.js";
 import {
@@ -184,20 +185,54 @@ describe("BUG-M2 cameraService sensor release and facingMode fallback", () => {
   });
 });
 
-describe("BUG-M3 audioVoiceService SpeechSynthesis priming, queue and ru-voice check", () => {
+describe("BUG-M3 audioVoiceService Android TTS watchdog, queue and Web Audio fallback", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
 
   afterEach(() => {
+    setSpeechUnavailableHandler(null);
     cancelSpeech();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
+  function createFakeAudioCtx() {
+    const oscillators = [];
+    class FakeAudioContext {
+      constructor() {
+        this.state = "running";
+        this.currentTime = 0;
+        this.destination = {};
+      }
+      resume() {
+        return Promise.resolve();
+      }
+      createOscillator() {
+        const osc = {
+          type: "sine",
+          frequency: { setValueAtTime: vi.fn() },
+          connect: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn()
+        };
+        oscillators.push(osc);
+        return osc;
+      }
+      createGain() {
+        return {
+          gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+          connect: vi.fn()
+        };
+      }
+    }
+    return { FakeAudioContext, oscillators };
+  }
+
   function installFakeTts(
     opts = { voices: /** @type {{ lang: string }[]} */ ([]), speaking: false }
   ) {
+    const addEventListener = vi.fn();
     const speak = vi.fn();
     const cancel = vi.fn();
     const resume = vi.fn();
@@ -205,6 +240,7 @@ describe("BUG-M3 audioVoiceService SpeechSynthesis priming, queue and ru-voice c
       speaking: opts.speaking,
       pending: false,
       getVoices: vi.fn(() => opts.voices),
+      addEventListener,
       speak,
       cancel,
       resume
@@ -218,60 +254,90 @@ describe("BUG-M3 audioVoiceService SpeechSynthesis priming, queue and ru-voice c
         this.volume = 1;
         /** @type {unknown} */
         this.voice = null;
+        /** @type {(() => void) | null} */
+        this.onstart = null;
+        /** @type {(() => void) | null} */
+        this.onend = null;
+        /** @type {((ev: { error?: string }) => void) | null} */
+        this.onerror = null;
       }
     }
+    const { FakeAudioContext, oscillators } = createFakeAudioCtx();
     vi.stubGlobal("SpeechSynthesisUtterance", FakeUtterance);
-    vi.stubGlobal("window", { speechSynthesis: synth });
-    return { synth, speak, cancel, resume };
+    vi.stubGlobal("window", { speechSynthesis: synth, AudioContext: FakeAudioContext });
+    return { synth, speak, cancel, resume, addEventListener, oscillators };
   }
 
-  it("primes SpeechSynthesis with silent utterance and reports missing Russian voice", () => {
-    const { speak, resume } = installFakeTts({
-      voices: [{ lang: "en-US" }],
-      speaking: false
+  it("primes via getVoices/resume and single voiceschanged listener without empty Utterance", () => {
+    const { speak, resume, getVoices, addEventListener } = (() => {
+      const t = installFakeTts({ voices: [{ lang: "en-US" }], speaking: false });
+      return { ...t, getVoices: t.synth.getVoices };
+    })();
+    expect(primeSpeechSynthesis()).toEqual({ supported: true, missingRussianVoice: true });
+    expect(primeSpeechSynthesis()).toEqual({ supported: true, missingRussianVoice: true });
+    expect(getVoices).toHaveBeenCalledTimes(2);
+    expect(resume).toHaveBeenCalledTimes(2);
+    expect(addEventListener).toHaveBeenCalledTimes(1);
+    expect(addEventListener).toHaveBeenCalledWith("voiceschanged", expect.any(Function), {
+      once: true
     });
-    const res = primeSpeechSynthesis();
-    expect(res).toEqual({ supported: true, missingRussianVoice: true });
-    expect(resume).toHaveBeenCalledTimes(1);
-    expect(speak).toHaveBeenCalledTimes(1);
-    expect(speak.mock.calls[0][0].text).toBe("");
-    expect(speak.mock.calls[0][0].volume).toBe(0);
-  });
-
-  it("returns no_russian_voice when voices exist without ru, and allows empty voices", () => {
-    const t1 = installFakeTts({ voices: [{ lang: "en-US" }], speaking: false });
-    expect(speakRussianHint("Поднимите руку", true, 5000)).toEqual({
-      ok: false,
-      reason: "no_russian_voice"
-    });
-    expect(t1.speak).not.toHaveBeenCalled();
-
-    const t2 = installFakeTts({ voices: [], speaking: false });
-    expect(speakRussianHint("Поднимите руку", true, 5000)).toEqual({ ok: true });
-    expect(t2.speak).toHaveBeenCalledTimes(1);
-  });
-
-  it("cancels active speech, delays ~60ms, assigns ru voice, and cancels queued timer", async () => {
-    const ruVoice = { lang: "ru-RU", name: "Russian" };
-    const { speak, cancel, resume } = installFakeTts({
-      voices: [{ lang: "en-US" }, ruVoice],
-      speaking: true
-    });
-
-    expect(speakRussianHint("Поднимите локоть", true, 10000)).toEqual({ ok: true });
-    expect(cancel).toHaveBeenCalledTimes(1);
     expect(speak).not.toHaveBeenCalled();
+  });
 
-    await vi.advanceTimersByTimeAsync(60);
-    expect(resume).toHaveBeenCalledTimes(1);
-    expect(speak).toHaveBeenCalledTimes(1);
-    expect(speak.mock.calls[0][0].lang).toBe("ru-RU");
-    expect(speak.mock.calls[0][0].voice).toBe(ruVoice);
+  it("returns busy when speaking < 4000ms without cancel, and resets stuck speaking >= 4000ms", () => {
+    const ruVoice = { lang: "ru-RU", name: "Russian" };
+    const { synth, speak, cancel } = installFakeTts({ voices: [ruVoice], speaking: false });
 
-    speakRussianHint("Опустите плечо", true, 15000);
-    expect(cancel).toHaveBeenCalledTimes(2);
-    cancelSpeech();
-    await vi.advanceTimersByTimeAsync(60);
+    expect(speakRussianHint("Поднимите локоть", true, 5000)).toEqual({ ok: true });
     expect(speak).toHaveBeenCalledTimes(1);
+    const firstUtt = speak.mock.calls[0][0];
+    firstUtt.onstart?.();
+
+    synth.speaking = true;
+    expect(speakRussianHint("Ниже плечи", true, 8500)).toEqual({ ok: false, reason: "busy" });
+    expect(cancel).not.toHaveBeenCalled();
+
+    expect(speakRussianHint("Ниже плечи", true, 9200)).toEqual({ ok: true });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(speak).toHaveBeenCalledTimes(2);
+
+    synth.speaking = false;
+    speak.mock.calls[1][0].onend?.();
+    expect(speakRussianHint("Отлично", true, 13000)).toEqual({ ok: true });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("triggers Web Audio fallback and handler on watchdog 1500ms timeout or onerror", async () => {
+    const t1 = installFakeTts({ voices: [], speaking: false });
+    const onUnavailable = vi.fn();
+    setSpeechUnavailableHandler(onUnavailable);
+
+    expect(speakRussianHint("Выровняйте корпус", true, 5000)).toEqual({ ok: true });
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
+    expect(t1.cancel).toHaveBeenCalledTimes(1);
+    expect(t1.oscillators).toHaveLength(2);
+    expect(primeSpeechSynthesis().supported).toBe(false);
+    expect(speakRussianHint("Повтор", true, 9000)).toEqual({ ok: true, fallback: "tone" });
+    expect(t1.oscillators).toHaveLength(4);
+
+    const t2 = installFakeTts({ voices: [{ lang: "ru-RU" }], speaking: false });
+    const onErrUnavailable = vi.fn();
+    setSpeechUnavailableHandler(onErrUnavailable);
+    expect(speakRussianHint("Поднимите руку", true, 5000)).toEqual({ ok: true });
+    t2.speak.mock.calls[0][0].onerror?.({ error: "synthesis-unavailable" });
+    expect(onErrUnavailable).toHaveBeenCalledTimes(1);
+    expect(t2.oscillators).toHaveLength(2);
+  });
+
+  it("uses Web Audio fallback and notifies UI when voices exist without ru", () => {
+    const t = installFakeTts({ voices: [{ lang: "en-US" }], speaking: false });
+    const onUnavailable = vi.fn();
+    setSpeechUnavailableHandler(onUnavailable);
+
+    expect(speakRussianHint("Поднимите руку", true, 5000)).toEqual({ ok: true, fallback: "tone" });
+    expect(t.speak).not.toHaveBeenCalled();
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
+    expect(t.oscillators).toHaveLength(2);
   });
 });

@@ -8,7 +8,8 @@ export const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.
 export const IMAGE_POSE_CONFIDENCE = 0.2;
 export const IMAGE_PREPROCESS_PAD_RATIO = 0.15;
 export const CAMERA_RELEASE_DELAY_MS = 150;
-export const SPEECH_CANCEL_DELAY_MS = 60;
+export const SPEECH_WATCHDOG_MS = 1500;
+export const SPEECH_STUCK_MS = 4000;
 
 export const AUTO_SHUTTER_HOLD_MS = 800;
 export const SHUTTER_COOLDOWN_MS = 2200;

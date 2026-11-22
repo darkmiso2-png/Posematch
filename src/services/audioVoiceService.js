@@ -1,32 +1,43 @@
-import { SPEECH_CANCEL_DELAY_MS, VOICE_COOLDOWN_MS } from "../core/constants.js";
-import { clamp } from "../core/poseMath.js";
+import { SPEECH_STUCK_MS, SPEECH_WATCHDOG_MS, VOICE_COOLDOWN_MS } from "../core/constants.js";
+import {
+  ensureAudioContext,
+  playCountdownTick,
+  playParktronicBeep,
+  playShutterSound,
+  playVoiceFallbackTone
+} from "./webAudioService.js";
 
-/** @type {AudioContext | null} */
-let audioCtx = null;
+export { ensureAudioContext, playCountdownTick, playParktronicBeep, playShutterSound };
+
 let unlockInstalled = false;
-let lastBeepTime = 0;
 let lastVoiceTime = 0;
 let speechSeq = 0;
+let activeSpeechStartAt = 0;
+let ttsRuntimeUnsupported = false;
+/** @type {SpeechSynthesis | null} */
+let lastSynthRef = null;
+/** @type {WeakSet<object>} */
+const voicesSubscribedSynths = new WeakSet();
 /** @type {ReturnType<typeof setTimeout> | null} */
-let speechTimerId = null;
+let watchdogTimerId = null;
+/** @type {(() => void) | null} */
+let speechUnavailableHandler = null;
 
-/**
- * Ленивая инициализация и разблокировка AudioContext после жеста пользователя.
- * @returns {AudioContext | null}
- */
-export function ensureAudioContext() {
-  if (typeof window === "undefined") return null;
-  if (!audioCtx) {
-    const Ctor =
-      window.AudioContext ||
-      /** @type {Window & { webkitAudioContext?: typeof AudioContext }} */ (window)
-        .webkitAudioContext;
-    if (Ctor) audioCtx = new Ctor();
+function clearWatchdog() {
+  if (watchdogTimerId !== null) {
+    clearTimeout(watchdogTimerId);
+    watchdogTimerId = null;
   }
-  if (audioCtx && audioCtx.state === "suspended") {
-    audioCtx.resume().catch(() => {});
-  }
-  return audioCtx;
+}
+
+/** @param {SpeechSynthesis} synth */
+function syncSynthInstance(synth) {
+  if (lastSynthRef === synth) return;
+  lastSynthRef = synth;
+  ttsRuntimeUnsupported = false;
+  activeSpeechStartAt = 0;
+  lastVoiceTime = 0;
+  clearWatchdog();
 }
 
 /**
@@ -39,8 +50,37 @@ function findRussianVoice(synth) {
   return { voices, ruVoice };
 }
 
+/** @param {SpeechSynthesis} synth */
+function ensureVoicesChangedListener(synth) {
+  if (voicesSubscribedSynths.has(synth)) return;
+  if (typeof synth.addEventListener !== "function") return;
+  voicesSubscribedSynths.add(synth);
+  synth.addEventListener(
+    "voiceschanged",
+    () => {
+      findRussianVoice(synth);
+    },
+    { once: true }
+  );
+}
+
+function notifySpeechUnavailable() {
+  if (speechUnavailableHandler) {
+    speechUnavailableHandler();
+  }
+}
+
 /**
- * Разблокировка мобильного TTS-движка (SpeechSynthesis) внутри пользовательского жеста.
+ * Регистрирует коллбэк уведомления UI о недоступности или отсутствии русского TTS.
+ * @param {(() => void) | null} handler
+ * @returns {void}
+ */
+export function setSpeechUnavailableHandler(handler) {
+  speechUnavailableHandler = handler;
+}
+
+/**
+ * Разблокировка мобильного TTS-движка без проигрывания пустой фразы.
  * @returns {{ supported: boolean, missingRussianVoice: boolean }}
  */
 export function primeSpeechSynthesis() {
@@ -52,16 +92,13 @@ export function primeSpeechSynthesis() {
     return { supported: false, missingRussianVoice: false };
   }
   const synth = window.speechSynthesis;
+  syncSynthInstance(synth);
   try {
+    ensureVoicesChangedListener(synth);
     const { voices, ruVoice } = findRussianVoice(synth);
     if (typeof synth.resume === "function") synth.resume();
-    const blank = new SpeechSynthesisUtterance("");
-    blank.lang = "ru-RU";
-    if (ruVoice) blank.voice = ruVoice;
-    blank.volume = 0;
-    synth.speak(blank);
     return {
-      supported: true,
+      supported: !ttsRuntimeUnsupported,
       missingRussianVoice: voices.length > 0 && !ruVoice
     };
   } catch (err) {
@@ -88,111 +125,30 @@ export function installAudioUnlockListener() {
 }
 
 /**
- * Звуковой «Парктроник»: частота и частота пиков растут с ростом процента совпадения.
- * Не создает и не разблокирует AudioContext без жеста пользователя.
- * @param {number} score
- * @param {number} threshold
- * @param {boolean} enabled
  * @param {number} now
- * @returns {void}
+ * @param {number} intervalMs
+ * @returns {SpeakHintResult}
  */
-export function playParktronicBeep(score, threshold, enabled, now) {
-  if (!enabled || score < 35) return;
-  if (!audioCtx || audioCtx.state !== "running") return;
-  const t = clamp((score - 35) / 65, 0, 1);
-  const interval = 950 - t * 830;
-  if (now - lastBeepTime < interval) return;
-  lastBeepTime = now;
-
-  const ctx = audioCtx;
-
-  const freq = 380 + t * 770;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = score >= threshold ? "triangle" : "sine";
-  osc.frequency.setValueAtTime(freq, ctx.currentTime);
-
-  gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.11, ctx.currentTime + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.075);
-
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + 0.08);
-}
-
-/**
- * Синтез звука щелчка затвора камеры.
- * @returns {void}
- */
-export function playShutterSound() {
-  const ctx = ensureAudioContext();
-  if (!ctx || ctx.state !== "running") return;
-
-  const bufferSize = Math.floor(ctx.sampleRate * 0.09);
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i += 1) {
-    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
+function runFallbackToneWithCooldown(now, intervalMs) {
+  notifySpeechUnavailable();
+  if (now - lastVoiceTime < intervalMs) {
+    return { ok: false, reason: "cooldown" };
   }
-
-  const noise = ctx.createBufferSource();
-  noise.buffer = buffer;
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = "bandpass";
-  filter.frequency.setValueAtTime(1900, ctx.currentTime);
-  filter.Q.setValueAtTime(1.2, ctx.currentTime);
-
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.38, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.09);
-
-  noise.connect(filter);
-  filter.connect(gain);
-  gain.connect(ctx.destination);
-  noise.start(ctx.currentTime);
-
-  const clickOsc = ctx.createOscillator();
-  const clickGain = ctx.createGain();
-  clickOsc.type = "triangle";
-  clickOsc.frequency.setValueAtTime(240, ctx.currentTime);
-  clickOsc.frequency.exponentialRampToValueAtTime(75, ctx.currentTime + 0.05);
-  clickGain.gain.setValueAtTime(0.25, ctx.currentTime);
-  clickGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.055);
-  clickOsc.connect(clickGain);
-  clickGain.connect(ctx.destination);
-  clickOsc.start(ctx.currentTime);
-  clickOsc.stop(ctx.currentTime + 0.06);
-}
-
-/**
- * Короткий пик обратного отсчета (3..2..1).
- * @returns {void}
- */
-export function playCountdownTick() {
-  const ctx = ensureAudioContext();
-  if (!ctx || ctx.state !== "running") return;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.frequency.setValueAtTime(660, ctx.currentTime);
-  gain.gain.setValueAtTime(0.08, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + 0.11);
+  lastVoiceTime = now;
+  playVoiceFallbackTone();
+  return { ok: true, fallback: "tone" };
 }
 
 /**
  * @typedef {Object} SpeakHintResult
  * @property {boolean} ok
- * @property {"disabled" | "unsupported" | "cooldown" | "no_russian_voice" | "error"} [reason]
+ * @property {"disabled" | "unsupported" | "cooldown" | "busy" | "no_russian_voice" | "error"} [reason]
+ * @property {"tone"} [fallback]
  */
 
 /**
- * Голосовая подсказка на русском языке с защитой от гонки cancel()+speak() на Android.
+ * Голосовая подсказка на русском языке: без пустых/перекрывающихся cancel(),
+ * с watchdog 1500 мс и Web Audio fallback при недоступном TTS.
  * @param {string} text
  * @param {boolean} enabled
  * @param {number} now
@@ -201,69 +157,111 @@ export function playCountdownTick() {
  */
 export function speakRussianHint(text, enabled, now, intervalMs = VOICE_COOLDOWN_MS) {
   if (!enabled || !text) return { ok: false, reason: "disabled" };
-  if (
-    typeof window === "undefined" ||
-    !("speechSynthesis" in window) ||
-    typeof SpeechSynthesisUtterance === "undefined"
-  ) {
-    return { ok: false, reason: "unsupported" };
+  if (typeof window === "undefined") return { ok: false, reason: "unsupported" };
+
+  if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+    return runFallbackToneWithCooldown(now, intervalMs);
   }
 
   const synth = window.speechSynthesis;
+  syncSynthInstance(synth);
   try {
+    ensureVoicesChangedListener(synth);
     const { voices, ruVoice } = findRussianVoice(synth);
-    if (voices.length > 0 && !ruVoice) {
-      return { ok: false, reason: "no_russian_voice" };
+    if (ttsRuntimeUnsupported || (voices.length > 0 && !ruVoice)) {
+      return runFallbackToneWithCooldown(now, intervalMs);
     }
+
     if (now - lastVoiceTime < intervalMs) {
       return { ok: false, reason: "cooldown" };
     }
 
-    lastVoiceTime = now;
-    const seq = ++speechSeq;
-    if (speechTimerId !== null) {
-      clearTimeout(speechTimerId);
-      speechTimerId = null;
+    if (synth.speaking || synth.pending) {
+      if (activeSpeechStartAt === 0) {
+        activeSpeechStartAt = now;
+      }
+      if (now - activeSpeechStartAt < SPEECH_STUCK_MS) {
+        return { ok: false, reason: "busy" };
+      }
+      clearWatchdog();
+      activeSpeechStartAt = 0;
+      if (typeof synth.cancel === "function") synth.cancel();
     }
+
+    lastVoiceTime = now;
+    activeSpeechStartAt = now;
+    const seq = ++speechSeq;
+    clearWatchdog();
 
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang = "ru-RU";
     utt.rate = 1.05;
     if (ruVoice) utt.voice = ruVoice;
 
-    const dispatchSpeak = () => {
-      if (seq !== speechSeq) return;
-      if (typeof synth.resume === "function") synth.resume();
-      synth.speak(utt);
+    const triggerFallback = () => {
+      ttsRuntimeUnsupported = true;
+      activeSpeechStartAt = 0;
+      clearWatchdog();
+      notifySpeechUnavailable();
+      playVoiceFallbackTone();
     };
 
-    if (synth.speaking || synth.pending) {
-      synth.cancel();
-      speechTimerId = setTimeout(() => {
-        speechTimerId = null;
-        dispatchSpeak();
-      }, SPEECH_CANCEL_DELAY_MS);
-    } else {
-      dispatchSpeak();
-    }
+    utt.onstart = () => {
+      if (seq !== speechSeq) return;
+      clearWatchdog();
+    };
+    utt.onend = () => {
+      if (seq !== speechSeq) return;
+      clearWatchdog();
+      activeSpeechStartAt = 0;
+    };
+    utt.onerror = (ev) => {
+      if (seq !== speechSeq) return;
+      clearWatchdog();
+      activeSpeechStartAt = 0;
+      const errCode = ev && "error" in ev ? String(ev.error || "") : "";
+      if (errCode === "canceled" || errCode === "interrupted") return;
+      triggerFallback();
+    };
+
+    watchdogTimerId = setTimeout(() => {
+      watchdogTimerId = null;
+      if (seq !== speechSeq) return;
+      try {
+        if (typeof synth.cancel === "function") synth.cancel();
+      } catch {
+        /* ignore cancel errors on unsupported engines */
+      }
+      triggerFallback();
+    }, SPEECH_WATCHDOG_MS);
+
+    if (typeof synth.resume === "function") synth.resume();
+    synth.speak(utt);
     return { ok: true };
   } catch (err) {
     console.warn("SpeechSynthesis skipped:", err);
-    return { ok: false, reason: "error" };
+    ttsRuntimeUnsupported = true;
+    activeSpeechStartAt = 0;
+    clearWatchdog();
+    notifySpeechUnavailable();
+    playVoiceFallbackTone();
+    return { ok: true, fallback: "tone" };
   }
 }
 
 /**
- * Остановка текущей речи и отмена отложенной реплики.
+ * Остановка текущей речи и очистка watchdog-таймера.
  * @returns {void}
  */
 export function cancelSpeech() {
   speechSeq += 1;
-  if (speechTimerId !== null) {
-    clearTimeout(speechTimerId);
-    speechTimerId = null;
-  }
+  activeSpeechStartAt = 0;
+  clearWatchdog();
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      /* ignore */
+    }
   }
 }

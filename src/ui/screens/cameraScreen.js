@@ -4,7 +4,8 @@ import { getMirroredCopy } from "../../core/poseMath.js";
 import {
   cancelSpeech,
   ensureAudioContext,
-  primeSpeechSynthesis
+  primeSpeechSynthesis,
+  setSpeechUnavailableHandler
 } from "../../services/audioVoiceService.js";
 import { getState, navigateTo, openCalibrationDraft, updateSettings } from "../../state/store.js";
 import { drawStaticSkeleton } from "../overlayRenderer.js";
@@ -93,8 +94,15 @@ export function createCameraScreen(root, actions) {
   function notifyMissingRuVoice() {
     if (missingRuVoiceNotified) return;
     missingRuVoiceNotified = true;
-    showNotice("На устройстве не установлен русский голосовой пакет TTS", "info");
+    showNotice(
+      "Озвучка речи недоступна в этом браузере или не установлен русский TTS (включён звуковой сигнал)",
+      "info"
+    );
   }
+
+  setSpeechUnavailableHandler(() => {
+    if (getState().settings.voice) notifyMissingRuVoice();
+  });
 
   /** @param {boolean} mirrored */
   function setCameraMirrored(mirrored) {
@@ -193,7 +201,7 @@ export function createCameraScreen(root, actions) {
     if (next) {
       missingRuVoiceNotified = false;
       const tts = primeSpeechSynthesis();
-      if (tts.missingRussianVoice) notifyMissingRuVoice();
+      if (!tts.supported || tts.missingRussianVoice) notifyMissingRuVoice();
     } else {
       cancelSpeech();
     }
