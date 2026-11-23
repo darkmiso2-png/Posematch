@@ -123,3 +123,35 @@ export function createGalleryPaneRenderer() {
     img.src = src;
   };
 }
+
+/**
+ * Идемпотентно монтирует содержимое Empty State Экрана 4.
+ * @param {HTMLElement} emptyBox
+ * @returns {HTMLButtonElement}
+ */
+export function mountGalleryEmptyState(emptyBox) {
+  const existing = /** @type {HTMLButtonElement | null} */ (
+    emptyBox.querySelector("#gal-empty-camera")
+  );
+  if (existing && emptyBox.querySelector(".gal-empty-title")) {
+    return existing;
+  }
+
+  const title = document.createElement("strong");
+  title.className = "gal-empty-title";
+  title.textContent = "В этой сессии пока нет снимков";
+
+  const desc = document.createElement("p");
+  desc.className = "gal-empty-desc";
+  desc.textContent =
+    "Сделайте фото по эталону вручную или через автоспуск — дубли появятся здесь для сравнения Side-by-Side.";
+
+  const btnCamera = document.createElement("button");
+  btnCamera.id = "gal-empty-camera";
+  btnCamera.className = "btn btn-primary";
+  btnCamera.type = "button";
+  btnCamera.textContent = "← К камере";
+
+  emptyBox.replaceChildren(title, desc, btnCamera);
+  return btnCamera;
+}

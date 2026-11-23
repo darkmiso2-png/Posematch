@@ -44,17 +44,7 @@
           <span class="hub-nav-title">Библиотека поз</span>
         </div>
 
-        <div id="hub-notice" class="app-notice" role="status" aria-live="polite" hidden>
-          <span id="hub-notice-text" class="app-notice-text"></span>
-          <button
-            id="hub-notice-close"
-            class="app-notice-close"
-            type="button"
-            aria-label="Закрыть уведомление"
-          >
-            ×
-          </button>
-        </div>
+        <div id="hub-notice" class="app-notice" role="status" aria-live="polite" hidden></div>
 
         <div id="hub-dropzone" class="hub-dropzone" tabindex="0">
           <div class="hub-dropzone-head">
@@ -109,17 +99,7 @@
       </section>
 
       <section id="screen-calibration" class="screen" hidden>
-        <div id="calib-notice" class="app-notice" role="status" aria-live="polite" hidden>
-          <span id="calib-notice-text" class="app-notice-text"></span>
-          <button
-            id="calib-notice-close"
-            class="app-notice-close"
-            type="button"
-            aria-label="Закрыть уведомление"
-          >
-            ×
-          </button>
-        </div>
+        <div id="calib-notice" class="app-notice" role="status" aria-live="polite" hidden></div>
         <div id="calib-banner" class="status-pill">Калибровка позы</div>
         <div class="calib-canvas-wrap"><canvas id="calib-canvas"></canvas></div>
         <p id="calib-info-label" class="muted-note">
@@ -157,17 +137,7 @@
       </section>
 
       <section id="screen-camera" class="screen active">
-        <div id="cam-notice" class="app-notice" role="status" aria-live="polite" hidden>
-          <span id="cam-notice-text" class="app-notice-text"></span>
-          <button
-            id="cam-notice-close"
-            class="app-notice-close"
-            type="button"
-            aria-label="Закрыть уведомление"
-          >
-            ×
-          </button>
-        </div>
+        <div id="cam-notice" class="app-notice" role="status" aria-live="polite" hidden></div>
 
         <div class="viewport-box">
           <video id="webcam" class="is-mirrored" autoplay playsinline muted></video>
@@ -183,11 +153,7 @@
             <span id="ref-mini-name" class="ref-mini-name">Эталон</span>
           </button>
 
-          <div id="countdown-overlay" class="countdown-overlay">
-            <span id="countdown-num" class="countdown-num">3</span>
-            <span class="countdown-sub">Приготовьте позу...</span>
-            <button id="btn-cancel-record" class="btn" type="button">Отмена</button>
-          </div>
+          <div id="countdown-overlay" class="countdown-overlay"></div>
 
           <div id="shutter-flash" class="shutter-flash"></div>
 
@@ -201,16 +167,7 @@
             </div>
           </div>
 
-          <div id="camera-fallback" class="cam-fallback-card" role="alert" hidden>
-            <strong id="camera-error-title" class="cam-fallback-title">Камера недоступна</strong>
-            <span id="camera-error-msg" class="cam-fallback-msg">Камера не активна</span>
-            <div class="cam-fallback-actions">
-              <button id="btn-retry-cam" class="btn btn-primary" type="button">
-                Повторить доступ к камере
-              </button>
-              <button id="btn-fallback-hub" class="btn" type="button">Библиотека поз</button>
-            </div>
-          </div>
+          <div id="camera-fallback" class="cam-fallback-card" role="alert" hidden></div>
         </div>
 
         <div class="card">
@@ -224,19 +181,7 @@
               class="shutter-ring-btn"
               type="button"
               aria-label="Авто или ручной снимок"
-            >
-              <svg class="shutter-ring-svg" viewBox="0 0 68 68" aria-hidden="true">
-                <circle class="shutter-ring-track" cx="34" cy="34" r="28"></circle>
-                <circle
-                  id="shutter-ring-progress"
-                  class="shutter-ring-progress"
-                  cx="34"
-                  cy="34"
-                  r="28"
-                ></circle>
-              </svg>
-              <span class="shutter-ring-core">АВТО</span>
-            </button>
+            ></button>
             <button id="cam-btn-gallery" class="btn" type="button">
               Галерея (<span id="cam-gallery-count">0</span>)
             </button>
@@ -277,17 +222,7 @@
           <button id="gal-btn-hub" class="btn" type="button">Позы</button>
         </div>
 
-        <div id="gal-notice" class="app-notice" role="status" aria-live="polite" hidden>
-          <span id="gal-notice-text" class="app-notice-text"></span>
-          <button
-            id="gal-notice-close"
-            class="app-notice-close"
-            type="button"
-            aria-label="Закрыть уведомление"
-          >
-            ×
-          </button>
-        </div>
+        <div id="gal-notice" class="app-notice" role="status" aria-live="polite" hidden></div>
 
         <div id="gal-content">
           <div class="gal-meta-card">
@@ -334,14 +269,7 @@
           </div>
         </div>
 
-        <div id="gal-empty" class="gal-empty-state" hidden>
-          <strong class="gal-empty-title">В этой сессии пока нет снимков</strong>
-          <p class="gal-empty-desc">
-            Сделайте фото по эталону вручную или через автоспуск — дубли появятся здесь для
-            сравнения Side-by-Side.
-          </p>
-          <button id="gal-empty-camera" class="btn btn-primary" type="button">← К камере</button>
-        </div>
+        <div id="gal-empty" class="gal-empty-state" hidden></div>
       </section>
     </main>
     <script type="module" src="./src/main.js"></script>

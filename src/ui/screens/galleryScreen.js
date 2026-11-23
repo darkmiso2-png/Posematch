@@ -5,7 +5,12 @@ import {
   resolveShotReference
 } from "../../core/galleryLogic.js";
 import { deleteShot, navigateTo, selectShot, setShowSkeletonOverlay } from "../../state/store.js";
-import { createGalleryPaneRenderer, dataUrlToBlob } from "./galleryViewHelpers.js";
+import { createScreenNotice } from "../screenNotice.js";
+import {
+  createGalleryPaneRenderer,
+  dataUrlToBlob,
+  mountGalleryEmptyState
+} from "./galleryViewHelpers.js";
 
 const PANE_WIDTH = 360;
 const PANE_HEIGHT = 480;
@@ -17,11 +22,9 @@ const PANE_HEIGHT = 480;
  * @returns {{ render: (state: import("../../core/types.js").AppState) => void, clearNotice: () => void }}
  */
 export function createGalleryScreen(root) {
-  const noticeEl = /** @type {HTMLElement} */ (root.querySelector("#gal-notice"));
-  const noticeText = /** @type {HTMLElement} */ (root.querySelector("#gal-notice-text"));
-  const noticeClose = /** @type {HTMLButtonElement} */ (root.querySelector("#gal-notice-close"));
   const contentBox = /** @type {HTMLElement} */ (root.querySelector("#gal-content"));
   const emptyBox = /** @type {HTMLElement} */ (root.querySelector("#gal-empty"));
+  const btnEmptyCamera = mountGalleryEmptyState(emptyBox);
   const metaPoseEl = /** @type {HTMLElement} */ (root.querySelector("#gal-meta-pose"));
   const metaSubEl = /** @type {HTMLElement} */ (root.querySelector("#gal-meta-sub"));
   const shotScoreEl = /** @type {HTMLElement} */ (root.querySelector("#gal-shot-score"));
@@ -64,24 +67,14 @@ export function createGalleryScreen(root) {
   }
   window.addEventListener("pagehide", revokeActiveDownloadUrl);
 
-  /**
-   * @param {string} text
-   * @param {"info" | "error"} [tone]
-   */
-  function showNotice(text, tone = "info") {
-    noticeEl.className = `app-notice app-notice--${tone}`;
-    noticeText.textContent = text;
-    noticeEl.hidden = false;
-  }
-
-  function clearNotice() {
-    preserveDeleteNotice = false;
-    noticeEl.hidden = true;
-    noticeText.textContent = "";
-  }
-  noticeClose.addEventListener("click", clearNotice);
+  const { show: showNotice, clear: clearNotice } = createScreenNotice(root, "gal", {
+    defaultTone: "info",
+    onClear: () => {
+      preserveDeleteNotice = false;
+    }
+  });
   root.querySelector("#gal-btn-camera")?.addEventListener("click", () => navigateTo("camera"));
-  root.querySelector("#gal-empty-camera")?.addEventListener("click", () => navigateTo("camera"));
+  btnEmptyCamera.addEventListener("click", () => navigateTo("camera"));
   root.querySelector("#gal-btn-hub")?.addEventListener("click", () => navigateTo("hub"));
 
   toggleSkel.addEventListener("click", () => {

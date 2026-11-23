@@ -10,6 +10,7 @@ import {
 } from "../../state/store.js";
 import { getReferenceBadgeLabel, renderHubGrid } from "./hubCards.js";
 import { bindHubUpload } from "./hubUpload.js";
+import { createScreenNotice } from "../screenNotice.js";
 
 /**
  * Экран 1: Главный хаб (загрузка референса, Drag & Drop, фильтры, «Мои калибровки»).
@@ -18,9 +19,6 @@ import { bindHubUpload } from "./hubUpload.js";
  * @returns {{ render: (state: import("../../core/types.js").AppState) => void }}
  */
 export function createHubScreen(root, actions) {
-  const noticeEl = /** @type {HTMLElement} */ (root.querySelector("#hub-notice"));
-  const noticeText = /** @type {HTMLElement} */ (root.querySelector("#hub-notice-text"));
-  const noticeClose = /** @type {HTMLButtonElement} */ (root.querySelector("#hub-notice-close"));
   const dropzone = /** @type {HTMLElement} */ (root.querySelector("#hub-dropzone"));
   const uploadStatusEl = /** @type {HTMLElement} */ (root.querySelector("#hub-upload-status"));
   const uploadStatusText = /** @type {HTMLElement} */ (
@@ -44,21 +42,9 @@ export function createHubScreen(root, actions) {
   /** @type {string | null} */
   let editingId = null;
   let editingError = "";
-
-  /**
-   * @param {string} text
-   * @param {"error" | "info" | "success"} [tone]
-   */
-  function showNotice(text, tone = "error") {
-    noticeEl.className = `app-notice app-notice--${tone}`;
-    noticeText.textContent = text;
-    noticeEl.hidden = false;
-  }
-
-  function clearNotice() {
-    noticeEl.hidden = true;
-    noticeText.textContent = "";
-  }
+  const { show: showNotice, clear: clearNotice } = createScreenNotice(root, "hub", {
+    defaultTone: "error"
+  });
 
   /**
    * @param {boolean} busy
@@ -86,8 +72,6 @@ export function createHubScreen(root, actions) {
     onClearNotice: clearNotice,
     onDone: () => render(getState())
   });
-
-  noticeClose.addEventListener("click", clearNotice);
 
   filterRow.addEventListener("click", (e) => {
     const btn = /** @type {HTMLElement | null} */ (

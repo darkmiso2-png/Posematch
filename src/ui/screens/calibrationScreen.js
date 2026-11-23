@@ -19,6 +19,7 @@ import {
   getCanvasPointerPos,
   renderHiddenJointChips
 } from "./calibrationViewHelpers.js";
+import { createScreenNotice } from "../screenNotice.js";
 
 /**
  * Экран 2: ручная калибровка суставов эталона на Canvas.
@@ -26,9 +27,6 @@ import {
  * @returns {{ render: (state: import("../../core/types.js").AppState) => void }}
  */
 export function createCalibrationScreen(root) {
-  const noticeEl = /** @type {HTMLElement} */ (root.querySelector("#calib-notice"));
-  const noticeText = /** @type {HTMLElement} */ (root.querySelector("#calib-notice-text"));
-  const noticeClose = /** @type {HTMLButtonElement} */ (root.querySelector("#calib-notice-close"));
   const banner = /** @type {HTMLElement} */ (root.querySelector("#calib-banner"));
   const canvas = /** @type {HTMLCanvasElement} */ (root.querySelector("#calib-canvas"));
   const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext("2d"));
@@ -59,21 +57,9 @@ export function createCalibrationScreen(root) {
   let isDragging = false;
   /** @type {import("../../core/calibrationLogic.js").TapRecord | null} */
   let lastTap = null;
-
-  /**
-   * @param {string} text
-   * @param {"error" | "info" | "success"} [tone]
-   */
-  function showNotice(text, tone = "error") {
-    noticeEl.className = `app-notice app-notice--${tone}`;
-    noticeText.textContent = text;
-    noticeEl.hidden = false;
-  }
-
-  function clearNotice() {
-    noticeEl.hidden = true;
-    noticeText.textContent = "";
-  }
+  const { show: showNotice, clear: clearNotice } = createScreenNotice(root, "calib", {
+    defaultTone: "error"
+  });
 
   function resetPointerState() {
     activePointerId = null;
@@ -119,8 +105,6 @@ export function createCalibrationScreen(root) {
     infoLabel.textContent = `${JOINT_NAMES[idx] || "Точка"}: ${nextState ? "вкл." : "выкл."}`;
     draw();
   }
-
-  noticeClose.addEventListener("click", clearNotice);
 
   canvas.addEventListener("pointerdown", (e) => {
     if (activePointerId !== null) return;

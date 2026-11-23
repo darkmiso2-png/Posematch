@@ -1,15 +1,18 @@
 import { computeShutterRingProgress } from "../../core/cameraHudLogic.js";
-import { formatCameraOptionLabel, getSwitchCameraCopy } from "../../core/cameraSwitchLogic.js";
+import { getSwitchCameraCopy } from "../../core/cameraSwitchLogic.js";
 import { AUTO_SHUTTER_HOLD_MS } from "../../core/constants.js";
-import { getMirroredCopy } from "../../core/poseMath.js";
+import { ensureAudioContext } from "../../services/audioVoiceService.js";
+import { getState, navigateTo, openCalibrationDraft } from "../../state/store.js";
+import { createScreenNotice } from "../screenNotice.js";
+import { createCameraControls } from "./cameraControls.js";
 import {
-  cancelSpeech,
-  ensureAudioContext,
-  primeSpeechSynthesis,
-  setSpeechUnavailableHandler
-} from "../../services/audioVoiceService.js";
-import { getState, navigateTo, openCalibrationDraft, updateSettings } from "../../state/store.js";
-import { drawStaticSkeleton } from "../overlayRenderer.js";
+  createThumbnailRenderer,
+  mountCameraFallback,
+  mountCountdownOverlay,
+  mountShutterRing,
+  renderCameraSelectOptions,
+  updateShutterHud
+} from "./cameraViewHelpers.js";
 
 const SHUTTER_RING_RADIUS = 28;
 
@@ -32,52 +35,38 @@ export function createCameraScreen(root, actions) {
   const overlayCanvas = /** @type {HTMLCanvasElement} */ (root.querySelector("#overlay-canvas"));
   const viewportBox = /** @type {HTMLElement | null} */ (root.querySelector(".viewport-box"));
   const hudBar = /** @type {HTMLElement | null} */ (root.querySelector(".hud-bar"));
-  const noticeEl = /** @type {HTMLElement} */ (root.querySelector("#cam-notice"));
-  const noticeText = /** @type {HTMLElement} */ (root.querySelector("#cam-notice-text"));
-  const noticeClose = /** @type {HTMLButtonElement} */ (root.querySelector("#cam-notice-close"));
+  const { show: showNotice, clear: clearNotice } = createScreenNotice(root, "cam", {
+    defaultTone: "info"
+  });
   const refMiniBtn = /** @type {HTMLButtonElement} */ (root.querySelector("#ref-mini-btn"));
   const miniCanvas = /** @type {HTMLCanvasElement} */ (root.querySelector("#ref-mini-canvas"));
-  const miniCtx = /** @type {CanvasRenderingContext2D} */ (miniCanvas.getContext("2d"));
   const miniNameEl = /** @type {HTMLElement} */ (root.querySelector("#ref-mini-name"));
   const hudScore = /** @type {HTMLElement} */ (root.querySelector("#hud-score"));
   const hudHint = /** @type {HTMLElement} */ (root.querySelector("#hud-hint"));
   const holdBar = /** @type {HTMLElement} */ (root.querySelector("#hud-hold-fill"));
   const countdownEl = /** @type {HTMLElement} */ (root.querySelector("#countdown-overlay"));
-  const countdownNum = /** @type {HTMLElement} */ (root.querySelector("#countdown-num"));
+  const { countdownNum, btnCancelRecord } = mountCountdownOverlay(countdownEl);
   const flashEl = /** @type {HTMLElement} */ (root.querySelector("#shutter-flash"));
   const camFallback = /** @type {HTMLElement} */ (root.querySelector("#camera-fallback"));
-  const camErrTitle = /** @type {HTMLElement} */ (root.querySelector("#camera-error-title"));
-  const camErrText = /** @type {HTMLElement} */ (root.querySelector("#camera-error-msg"));
-  const btnRetryCam = /** @type {HTMLButtonElement} */ (root.querySelector("#btn-retry-cam"));
-  const btnFallbackHub = /** @type {HTMLButtonElement} */ (root.querySelector("#btn-fallback-hub"));
+  const { camErrTitle, camErrText, btnRetryCam, btnFallbackHub } = mountCameraFallback(camFallback);
   const camSelect = /** @type {HTMLSelectElement} */ (root.querySelector("#camera-select"));
-  const slider = /** @type {HTMLInputElement} */ (root.querySelector("#threshold-slider"));
-  const sliderVal = /** @type {HTMLElement} */ (root.querySelector("#threshold-value"));
   const galleryBadge = /** @type {HTMLElement} */ (root.querySelector("#cam-gallery-count"));
   const btnShutter = /** @type {HTMLButtonElement} */ (root.querySelector("#btn-manual-shutter"));
-  const ringProgress = /** @type {SVGCircleElement} */ (
-    /** @type {unknown} */ (root.querySelector("#shutter-ring-progress"))
-  );
+  const ringProgress = mountShutterRing(btnShutter);
   const btnRecord = /** @type {HTMLButtonElement} */ (root.querySelector("#btn-record-pose"));
   const btnSwitchCam = /** @type {HTMLButtonElement} */ (root.querySelector("#btn-switch-camera"));
   const btnCalib = /** @type {HTMLButtonElement} */ (root.querySelector("#cam-btn-calib"));
-  const btnAttach = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-attach"));
-  const btnMirror = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-mirror"));
-  const btnPark = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-parktronic"));
-  const btnVoice = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-voice"));
+  const controls = createCameraControls(root, {
+    onResetSmoothing: actions.onResetSmoothing,
+    showNotice
+  });
 
   const ringBase = computeShutterRingProgress(0, AUTO_SHUTTER_HOLD_MS, SHUTTER_RING_RADIUS);
   ringProgress.style.strokeDasharray = `${ringBase.circumference.toFixed(2)}`;
   ringProgress.style.strokeDashoffset = `${ringBase.dashOffset.toFixed(2)}`;
-
-  /** @type {import("../../core/types.js").PoseReference | null} */
-  let lastThumbRef = null;
-  /** @type {boolean | null} */
-  let lastThumbMirrored = null;
-  let thumbLoadSeq = 0;
+  const renderThumbnail = createThumbnailRenderer(miniCanvas, miniNameEl);
   /** @type {import("../../core/cameraHudLogic.js").CameraErrorInfo | null} */
   let cameraErrorInfo = null;
-  let missingRuVoiceNotified = false;
   let hasCameras = false;
   let canSwitchCamera = false;
   let isSwitchingCamera = false;
@@ -95,79 +84,10 @@ export function createCameraScreen(root, actions) {
   }
   syncSwitchControl();
 
-  /**
-   * @param {string} text
-   * @param {"info" | "error"} [tone]
-   */
-  function showNotice(text, tone = "info") {
-    noticeEl.className = `app-notice app-notice--${tone}`;
-    noticeText.textContent = text;
-    noticeEl.hidden = false;
-  }
-
-  function clearNotice() {
-    noticeEl.hidden = true;
-    noticeText.textContent = "";
-  }
-
-  function notifyMissingRuVoice() {
-    if (missingRuVoiceNotified) return;
-    missingRuVoiceNotified = true;
-    showNotice(
-      "Озвучка речи недоступна в этом браузере или не установлен русский TTS (включён звуковой сигнал)",
-      "info"
-    );
-  }
-
-  setSpeechUnavailableHandler(() => {
-    if (getState().settings.voice) notifyMissingRuVoice();
-  });
-
   /** @param {boolean} mirrored */
   function setCameraMirrored(mirrored) {
     video.classList.toggle("is-mirrored", mirrored);
     overlayCanvas.classList.toggle("is-mirrored", mirrored);
-  }
-
-  /** @param {import("../../core/types.js").AppState} state */
-  function renderThumbnail(state) {
-    const ref = state.activeReference;
-    if (!ref) {
-      lastThumbRef = null;
-      lastThumbMirrored = null;
-      thumbLoadSeq += 1;
-      miniNameEl.textContent = "Нет эталона";
-      miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
-      return;
-    }
-    miniNameEl.textContent = ref.name;
-    const mirrorRef = state.settings.mirrorRef;
-    if (ref === lastThumbRef && mirrorRef === lastThumbMirrored) return;
-    lastThumbRef = ref;
-    lastThumbMirrored = mirrorRef;
-    const seq = ++thumbLoadSeq;
-
-    const img = new Image();
-    img.onload = () => {
-      if (seq !== thumbLoadSeq) return;
-      const { width: W, height: H } = miniCanvas;
-      miniCtx.clearRect(0, 0, W, H);
-      miniCtx.save();
-      if (mirrorRef) {
-        miniCtx.translate(W, 0);
-        miniCtx.scale(-1, 1);
-      }
-      miniCtx.drawImage(img, 0, 0, W, H);
-      miniCtx.restore();
-      const lms = mirrorRef ? getMirroredCopy(ref.landmarks) : ref.landmarks;
-      drawStaticSkeleton(miniCtx, W, H, lms);
-    };
-    img.onerror = () => {
-      if (seq !== thumbLoadSeq) return;
-      lastThumbRef = null;
-      miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
-    };
-    img.src = ref.imageDataUrl;
   }
 
   function openHub() {
@@ -175,7 +95,6 @@ export function createCameraScreen(root, actions) {
     navigateTo("hub");
   }
 
-  noticeClose.addEventListener("click", clearNotice);
   refMiniBtn.addEventListener("click", openHub);
   root.querySelector("#cam-btn-hub")?.addEventListener("click", openHub);
   btnFallbackHub.addEventListener("click", openHub);
@@ -195,40 +114,12 @@ export function createCameraScreen(root, actions) {
     clearNotice();
     actions.onRecordPose();
   });
-  root.querySelector("#btn-cancel-record")?.addEventListener("click", () => {
+  btnCancelRecord.addEventListener("click", () => {
     actions.onCancelRecordPose();
   });
   camSelect.addEventListener("change", () => actions.onSelectCamera(camSelect.value));
   btnSwitchCam.addEventListener("click", () => {
     if (!btnSwitchCam.disabled) actions.onSwitchCamera();
-  });
-  slider.addEventListener("input", () => updateSettings({ threshold: Number(slider.value) }));
-
-  btnAttach.addEventListener("click", () => {
-    ensureAudioContext();
-    actions.onResetSmoothing();
-    updateSettings({ attachToBody: !getState().settings.attachToBody });
-  });
-  btnMirror.addEventListener("click", () => {
-    ensureAudioContext();
-    updateSettings({ mirrorRef: !getState().settings.mirrorRef });
-  });
-  btnPark.addEventListener("click", () => {
-    ensureAudioContext();
-    updateSettings({ parktronic: !getState().settings.parktronic });
-  });
-  btnVoice.addEventListener("click", () => {
-    ensureAudioContext();
-    const next = !getState().settings.voice;
-    if (next) {
-      missingRuVoiceNotified = false;
-      updateSettings({ voice: true });
-      const tts = primeSpeechSynthesis({ speakTest: true });
-      if (!tts.supported || tts.missingRussianVoice) notifyMissingRuVoice();
-    } else {
-      cancelSpeech();
-      updateSettings({ voice: false });
-    }
   });
 
   /**
@@ -242,22 +133,7 @@ export function createCameraScreen(root, actions) {
     if (facingMode === "user" || facingMode === "environment") {
       activeFacingMode = facingMode;
     }
-    if (cams.length === 0) {
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "Камеры не найдены";
-      camSelect.replaceChildren(opt);
-    } else {
-      const opts = cams.map((cam, i) => {
-        const opt = document.createElement("option");
-        opt.value = cam.deviceId;
-        opt.textContent = formatCameraOptionLabel(cam, i, activeId, activeFacingMode);
-        opt.selected = cam.deviceId === activeId;
-        return opt;
-      });
-      camSelect.replaceChildren(...opts);
-      if (activeId) camSelect.value = activeId;
-    }
+    renderCameraSelectOptions(camSelect, cams, activeId, activeFacingMode);
     syncSwitchControl();
   }
 
@@ -283,12 +159,13 @@ export function createCameraScreen(root, actions) {
    * @param {number} holdMs
    */
   function updateHud(score, hint, holdMs) {
-    hudScore.textContent = `${score}%`;
-    hudHint.textContent = hint;
-    const ring = computeShutterRingProgress(holdMs, AUTO_SHUTTER_HOLD_MS, SHUTTER_RING_RADIUS);
-    holdBar.style.width = `${ring.percent}%`;
-    ringProgress.style.strokeDashoffset = `${ring.dashOffset.toFixed(2)}`;
-    btnShutter.classList.toggle("is-holding", ring.progress > 0.02);
+    updateShutterHud(
+      { hudScore, hudHint, holdBar, ringProgress, btnShutter },
+      score,
+      hint,
+      holdMs,
+      SHUTTER_RING_RADIUS
+    );
   }
 
   function triggerFlash() {
@@ -298,15 +175,9 @@ export function createCameraScreen(root, actions) {
 
   /** @param {import("../../core/types.js").AppState} state */
   function render(state) {
-    const s = state.settings;
     const r = state.runtime;
 
-    btnAttach.classList.toggle("active-green", s.attachToBody);
-    btnMirror.classList.toggle("active-cyan", s.mirrorRef);
-    btnPark.classList.toggle("active-cyan", s.parktronic);
-    btnVoice.classList.toggle("active-cyan", s.voice);
-    slider.value = String(s.threshold);
-    sliderVal.textContent = `${s.threshold}%`;
+    controls.renderSettings(state.settings);
     galleryBadge.textContent = String(state.shots.length);
 
     const streamReady = r.cameraReady && !r.cameraError;
@@ -340,7 +211,7 @@ export function createCameraScreen(root, actions) {
     setCameraErrorInfo,
     showNotice,
     clearNotice,
-    notifyMissingRuVoice,
+    notifyMissingRuVoice: controls.notifyMissingRuVoice,
     updateHud,
     triggerFlash
   };

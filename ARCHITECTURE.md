@@ -46,6 +46,7 @@
 - `src/state/store.js` — реактивный Store состояния `AppState` и экшены переходов.
 - `src/state/storeHelpers.js` — вспомогательные функции инициализации, клонирования и сборки калибровки для `store.js`.
 - `src/ui/router.js` — переключение видимости 4 экранов и жизненный цикл `onEnter` / `onLeave`.
+- `src/ui/screenNotice.js` — идемпотентный контроллер и DOM-рендерер баннера уведомлений `.app-notice` для всех 4 экранов.
 - `src/ui/cameraController.js` — жизненный цикл видеопотока, пауза/возобновление камеры, защита от гонок и координация записи позы.
 - `src/ui/cameraFrameProcessor.js` — покадровая детекция позы, отрисовка оверлея, автозатвор 800 ms, аудио-обратная связь и захват снимка.
 - `src/ui/cameraPoseRecorder.js` — контроллер 3-секундного отсчета и записи эталонной позы с камеры.
@@ -56,9 +57,11 @@
 - `src/ui/screens/hubUpload.js` — Экран 1: загрузка фото (кнопка, Drag & Drop, Ctrl+V) с блокировкой и валидацией.
 - `src/ui/screens/calibrationScreen.js` — Экран 2: интерактивная калибровка суставов, синхронное зеркалирование и сохранение.
 - `src/ui/screens/calibrationViewHelpers.js` — Экран 2: запекание отзеркаленного фото, координаты Canvas и чипсы скрытых точек.
-- `src/ui/screens/cameraScreen.js` — Экран 3: Камера HUD, миниатюра «Эталон», кольцо автозатвора 800 ms, настройки 2x2, Fallback State и отсчет 3-2-1.
+- `src/ui/screens/cameraScreen.js` — Экран 3: координация Камеры HUD, переключения камер, записи позы и рендера состояния.
+- `src/ui/screens/cameraControls.js` — Экран 3: панель переключателей 2x2, слайдер порога и обработчик отсутствия русского TTS.
+- `src/ui/screens/cameraViewHelpers.js` — Экран 3: идемпотентный маунтинг SVG-кольца автозатвора/оверлеев, рендер миниатюры «Эталон», списка камер и HUD.
 - `src/ui/screens/galleryScreen.js` — Экран 4: сравнение Side-by-Side, тумблер скелета, метаданные, лента дублей, Empty State и скачивание JPG.
-- `src/ui/screens/galleryViewHelpers.js` — Экран 4: декодирование Blob и рендер панелей Side-by-Side с кэшированием и сохранением пропорций.
+- `src/ui/screens/galleryViewHelpers.js` — Экран 4: декодирование Blob, рендер панелей Side-by-Side с кэшированием и маунтинг Empty State.
 - `tests/poseMath.test.js` — юнит-тесты на математику углов, отзеркаливание, выравнивание и Edge Cases.
 - `tests/hubFeature.test.js` — юнит-тесты валидации имени калибровок, квоты `localStorage` и экшенов Store.
 - `tests/calibrationFeature.test.js` — юнит-тесты логики калибровки, жестов, валидации скелета и сохранения/отмены в Store.
