@@ -204,6 +204,10 @@ export function loadSettings() {
       attachToBody:
         typeof obj.attachToBody === "boolean" ? obj.attachToBody : DEFAULT_SETTINGS.attachToBody,
       mirrorRef: typeof obj.mirrorRef === "boolean" ? obj.mirrorRef : DEFAULT_SETTINGS.mirrorRef,
+      mirrorFrontCamera:
+        typeof obj.mirrorFrontCamera === "boolean"
+          ? obj.mirrorFrontCamera
+          : DEFAULT_SETTINGS.mirrorFrontCamera,
       parktronic:
         typeof obj.parktronic === "boolean" ? obj.parktronic : DEFAULT_SETTINGS.parktronic,
       voice: typeof obj.voice === "boolean" ? obj.voice : DEFAULT_SETTINGS.voice,

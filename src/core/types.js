@@ -31,7 +31,8 @@
  * @property {string} [referenceName] - Название эталона на момент съемки
  * @property {string} [referenceImageDataUrl] - Data URL эталона на момент съемки
  * @property {boolean} [refMirrored] - Был ли включен mirrorRef на момент съемки
- * @property {string} imageDataUrl - Чистый отзеркаленный JPEG Data URL
+ * @property {boolean} [cameraMirrored] - Было ли применено зеркалирование камеры в момент съемки
+ * @property {string} imageDataUrl - Чистый JPEG Data URL (с учетом cameraMirrored)
  * @property {number} score - Итоговый процент совпадения (0..100)
  * @property {JointPoint[] | null} userLandmarks - Скелет пользователя в момент спуска
  * @property {JointPoint[] | null} refLandmarks - Эффективный скелет эталона
@@ -44,6 +45,7 @@
  * @typedef {Object} AppSettings
  * @property {boolean} attachToBody - Режим «К телу»
  * @property {boolean} mirrorRef - Отзеркаливание эталонного скелета
+ * @property {boolean} mirrorFrontCamera - Зеркалирование передней камеры (true — «как в зеркале», false — «честный кадр»)
  * @property {boolean} parktronic - Звуковой «Парктроник»
  * @property {boolean} voice - Голосовые подсказки
  * @property {number} threshold - Порог автоспуска (60..95)

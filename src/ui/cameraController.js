@@ -1,4 +1,4 @@
-import { inferFacingModeFromDevice, shouldMirrorCamera } from "../core/cameraHudLogic.js";
+import { resolveActiveCameraFacing, resolveCameraMirrorState } from "../core/cameraMirrorLogic.js";
 import {
   formatCameraSwitchError,
   resolveDeviceFacing,
@@ -33,9 +33,9 @@ export function createCameraController(cameraView, deps = {}) {
   let lastFrameTime = performance.now();
   let isActive = false;
   let rafId = 0;
-  let mirrorCamera = true;
   /** @type {"user" | "environment" | ""} */
   let activeFacingMode = "";
+  let activeDeviceLabel = "";
   let isSwitchingCamera = false;
   let sessionToken = 0;
   /** @type {MediaDeviceInfo[]} */
@@ -44,6 +44,16 @@ export function createCameraController(cameraView, deps = {}) {
   /** @type {Promise<void> | null} */
   let connectPromise = null;
   let connectingDeviceId = "";
+
+  function getEffectiveMirrorCamera() {
+    const st = getState();
+    return resolveCameraMirrorState({
+      facingMode: activeFacingMode,
+      deviceId: st.settings.activeDeviceId,
+      deviceLabel: activeDeviceLabel,
+      mirrorFrontCamera: st.settings.mirrorFrontCamera
+    }).effectiveMirror;
+  }
 
   function isVideoStreamReady() {
     const v = cameraView.video;
@@ -62,7 +72,7 @@ export function createCameraController(cameraView, deps = {}) {
   const recorder = createPoseRecorder({
     cameraView,
     isStreamReady: isVideoStreamReady,
-    isCameraMirrored: () => mirrorCamera,
+    isCameraMirrored: getEffectiveMirrorCamera,
     ensureConnect: () => {
       if (!connectPromise && !isSwitchingCamera && !getState().runtime.cameraError) {
         connectCamera();
@@ -112,18 +122,18 @@ export function createCameraController(cameraView, deps = {}) {
       updateRuntime({ cameraReady: res.ok, cameraError: res.error });
 
       if (res.ok) {
-        const inferred = inferFacingModeFromDevice(res.deviceId, res.deviceLabel);
-        const resolvedFacing =
-          res.facingMode === "user" || res.facingMode === "environment"
-            ? res.facingMode
-            : inferred || preferredFacingMode || (mirrorCamera ? "user" : "environment");
-        activeFacingMode = resolvedFacing;
-        mirrorCamera = shouldMirrorCamera(activeFacingMode, res.deviceLabel);
-        cameraView.setCameraMirrored(mirrorCamera);
+        activeDeviceLabel = res.deviceLabel || "";
+        activeFacingMode = resolveActiveCameraFacing(
+          res.facingMode,
+          res.deviceId,
+          activeDeviceLabel,
+          preferredFacingMode
+        );
 
         if (res.deviceId && res.deviceId !== getState().settings.activeDeviceId) {
           updateSettings({ activeDeviceId: res.deviceId });
         }
+        cameraView.setCameraMirrored(getEffectiveMirrorCamera());
 
         const cams = await listDevices().catch(() => cachedDevices);
         if (!isActive || mySession !== sessionToken || getState().currentScreen !== "camera") {
@@ -246,7 +256,7 @@ export function createCameraController(cameraView, deps = {}) {
     if (st.currentScreen === "camera" && !isSwitchingCamera) {
       recorder.step(dt);
       if (!isActive) return;
-      frameProcessor.processFrame(dt, now, isVideoStreamReady(), mirrorCamera);
+      frameProcessor.processFrame(dt, now, isVideoStreamReady(), getEffectiveMirrorCamera());
     }
 
     if (isActive) {
@@ -292,7 +302,7 @@ export function createCameraController(cameraView, deps = {}) {
     st.runtime.holdMs = 0;
     st.runtime.shutterCooldownMs = SHUTTER_COOLDOWN_MS;
     const score = frameProcessor.getLastScore();
-    frameProcessor.takeShot(score, mirrorCamera);
+    frameProcessor.takeShot(score, getEffectiveMirrorCamera());
     cameraView.updateHud(score, "Снимок сохранён!", 0);
   }
 

@@ -4,8 +4,9 @@ import {
   startCountdown,
   stepCountdown
 } from "../core/cameraHudLogic.js";
+import { transformShotLandmarksForCapture } from "../core/cameraMirrorLogic.js";
 import { POSE_RECORD_SECONDS } from "../core/constants.js";
-import { cloneLandmarks, getMirroredCopy } from "../core/poseMath.js";
+import { cloneLandmarks } from "../core/poseMath.js";
 import { playCountdownTick, playShutterSound } from "../services/audioVoiceService.js";
 import { captureVideoFrame } from "../services/cameraService.js";
 import { openCalibrationDraft, updateRuntime } from "../state/store.js";
@@ -64,7 +65,8 @@ export function createPoseRecorder(deps) {
 
     playShutterSound();
     deps.cameraView.triggerFlash();
-    const captured = mirrored ? getMirroredCopy(userLms) : cloneLandmarks(userLms);
+    const captured = transformShotLandmarksForCapture(userLms, mirrored);
+    if (!captured) return;
     openCalibrationDraft({
       id: `rec-${Date.now()}`,
       name: "Моя поза",
@@ -73,7 +75,7 @@ export function createPoseRecorder(deps) {
       imageDataUrl: dataUrl,
       aspect: video.videoWidth / video.videoHeight,
       landmarks: captured,
-      autoLandmarks: captured,
+      autoLandmarks: cloneLandmarks(captured),
       autoDetected: true,
       createdAt: Date.now()
     });

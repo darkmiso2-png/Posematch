@@ -87,6 +87,7 @@ export const BONE_CONNECTIONS = [
 export const DEFAULT_SETTINGS = {
   attachToBody: true,
   mirrorRef: false,
+  mirrorFrontCamera: true,
   parktronic: true,
   voice: false,
   threshold: 80,

@@ -272,6 +272,16 @@
   width: 100%;
 }
 
+.cam-mirror-btn {
+  width: 100%;
+}
+.cam-mirror-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--text-muted);
+  border-color: var(--border-card);
+}
+
 .viewport-box.has-camera-error .hud-bar,
 .viewport-box:has(#camera-fallback:not([hidden])) .hud-bar {
   display: none;

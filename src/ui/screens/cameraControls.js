@@ -1,3 +1,4 @@
+import { getFrontMirrorToggleCopy } from "../../core/cameraMirrorLogic.js";
 import {
   cancelSpeech,
   ensureAudioContext,
@@ -7,14 +8,18 @@ import {
 import { getState, updateSettings } from "../../state/store.js";
 
 /**
- * Подсистема панели настроек 2x2 и слайдера порога автоспуска Экрана 3.
+ * Подсистема панели настроек 2x2, режима зеркалирования передней камеры и слайдера порога Экрана 3.
  * @param {HTMLElement} root
  * @param {{
  *   onResetSmoothing: () => void,
  *   showNotice: (text: string, tone?: "info" | "error" | "success") => void
  * }} deps
  * @returns {{
- *   renderSettings: (settings: import("../../core/types.js").AppSettings) => void,
+ *   renderSettings: (
+ *     settings: import("../../core/types.js").AppSettings,
+ *     mirrorState: import("../../core/cameraMirrorLogic.js").CameraMirrorState,
+ *     isBusy?: boolean
+ *   ) => void,
  *   notifyMissingRuVoice: () => void
  * }}
  */
@@ -23,6 +28,9 @@ export function createCameraControls(root, deps) {
   const sliderVal = /** @type {HTMLElement} */ (root.querySelector("#threshold-value"));
   const btnAttach = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-attach"));
   const btnMirror = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-mirror"));
+  const btnFrontMirror = /** @type {HTMLButtonElement | null} */ (
+    root.querySelector("#toggle-front-mirror")
+  );
   const btnPark = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-parktronic"));
   const btnVoice = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-voice"));
 
@@ -54,6 +62,12 @@ export function createCameraControls(root, deps) {
     updateSettings({ mirrorRef: !getState().settings.mirrorRef });
   });
 
+  btnFrontMirror?.addEventListener("click", () => {
+    if (btnFrontMirror.disabled) return;
+    ensureAudioContext();
+    updateSettings({ mirrorFrontCamera: !getState().settings.mirrorFrontCamera });
+  });
+
   btnPark.addEventListener("click", () => {
     ensureAudioContext();
     updateSettings({ parktronic: !getState().settings.parktronic });
@@ -73,14 +87,32 @@ export function createCameraControls(root, deps) {
     }
   });
 
-  /** @param {import("../../core/types.js").AppSettings} s */
-  function renderSettings(s) {
+  /**
+   * @param {import("../../core/types.js").AppSettings} s
+   * @param {import("../../core/cameraMirrorLogic.js").CameraMirrorState} mirrorState
+   * @param {boolean} [isBusy]
+   */
+  function renderSettings(s, mirrorState, isBusy = false) {
     btnAttach.classList.toggle("active-green", s.attachToBody);
+    btnAttach.setAttribute("aria-pressed", String(s.attachToBody));
     btnMirror.classList.toggle("active-cyan", s.mirrorRef);
+    btnMirror.setAttribute("aria-pressed", String(s.mirrorRef));
     btnPark.classList.toggle("active-cyan", s.parktronic);
+    btnPark.setAttribute("aria-pressed", String(s.parktronic));
     btnVoice.classList.toggle("active-cyan", s.voice);
+    btnVoice.setAttribute("aria-pressed", String(s.voice));
     slider.value = String(s.threshold);
     sliderVal.textContent = `${s.threshold}%`;
+
+    if (btnFrontMirror) {
+      const copy = getFrontMirrorToggleCopy(mirrorState, isBusy);
+      btnFrontMirror.textContent = copy.label;
+      btnFrontMirror.disabled = copy.disabled;
+      btnFrontMirror.setAttribute("aria-label", copy.ariaLabel);
+      btnFrontMirror.setAttribute("aria-pressed", String(copy.pressed));
+      btnFrontMirror.title = copy.title;
+      btnFrontMirror.classList.toggle("active-cyan", copy.pressed && !copy.disabled);
+    }
   }
 
   return { renderSettings, notifyMissingRuVoice };

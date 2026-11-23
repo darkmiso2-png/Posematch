@@ -1,4 +1,5 @@
 import { stepAutoShutter } from "../core/cameraHudLogic.js";
+import { transformShotLandmarksForCapture } from "../core/cameraMirrorLogic.js";
 import { createSmoothingState } from "../core/poseAlignment.js";
 import { evaluatePose } from "../core/poseEvaluator.js";
 import { cloneLandmarks, getMirroredCopy } from "../core/poseMath.js";
@@ -69,13 +70,10 @@ export function createCameraFrameProcessor(cameraView) {
       referenceName: st.activeReference.name,
       referenceImageDataUrl: st.activeReference.imageDataUrl,
       refMirrored: st.settings.mirrorRef,
+      cameraMirrored: mirrorCamera,
       imageDataUrl: dataUrl,
       score,
-      userLandmarks: userLandmarks
-        ? mirrorCamera
-          ? getMirroredCopy(userLandmarks)
-          : cloneLandmarks(userLandmarks)
-        : null,
+      userLandmarks: transformShotLandmarksForCapture(userLandmarks, mirrorCamera),
       refLandmarks: refLms,
       createdAt: Date.now()
     });

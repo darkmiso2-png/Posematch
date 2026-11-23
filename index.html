@@ -188,10 +188,20 @@
           </div>
 
           <div class="row-2">
-            <button id="toggle-attach" class="btn" type="button">К телу</button>
-            <button id="toggle-mirror" class="btn" type="button">Зеркало</button>
-            <button id="toggle-parktronic" class="btn" type="button">Парктроник</button>
-            <button id="toggle-voice" class="btn" type="button">Голос</button>
+            <button id="toggle-attach" class="btn" type="button" aria-pressed="true">К телу</button>
+            <button
+              id="toggle-mirror"
+              class="btn"
+              type="button"
+              aria-pressed="false"
+              title="Отзеркалить эталонную позу"
+            >
+              Зеркало позы
+            </button>
+            <button id="toggle-parktronic" class="btn" type="button" aria-pressed="true">
+              Парктроник
+            </button>
+            <button id="toggle-voice" class="btn" type="button" aria-pressed="false">Голос</button>
           </div>
 
           <label class="muted-note cam-threshold-label">
@@ -207,6 +217,15 @@
           </label>
 
           <select id="camera-select" class="btn" aria-label="Выбор камеры"></select>
+
+          <button
+            id="toggle-front-mirror"
+            class="btn cam-mirror-btn"
+            type="button"
+            aria-pressed="true"
+          >
+            Передняя: как в зеркале
+          </button>
 
           <div class="row-2">
             <button id="btn-record-pose" class="btn" type="button">Запись позы 3с</button>

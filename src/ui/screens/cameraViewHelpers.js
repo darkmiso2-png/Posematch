@@ -1,4 +1,5 @@
 import { computeShutterRingProgress } from "../../core/cameraHudLogic.js";
+import { shouldMirrorReferencePreview } from "../../core/cameraMirrorLogic.js";
 import { formatCameraOptionLabel } from "../../core/cameraSwitchLogic.js";
 import { AUTO_SHUTTER_HOLD_MS } from "../../core/constants.js";
 import { getMirroredCopy } from "../../core/poseMath.js";
@@ -142,9 +143,10 @@ export function mountCameraFallback(camFallback) {
 
 /**
  * Создает рендерер плавающей миниатюры «Эталон» с защитой от гонок декодирования.
+ * Ориентация миниатюры синхронизируется с живым оверлеем через mirrorRef и effectiveCameraMirror.
  * @param {HTMLCanvasElement} miniCanvas
  * @param {HTMLElement} miniNameEl
- * @returns {(state: import("../../core/types.js").AppState) => void}
+ * @returns {(state: import("../../core/types.js").AppState, effectiveCameraMirror?: boolean) => void}
  */
 export function createThumbnailRenderer(miniCanvas, miniNameEl) {
   const miniCtx = /** @type {CanvasRenderingContext2D} */ (miniCanvas.getContext("2d"));
@@ -154,7 +156,7 @@ export function createThumbnailRenderer(miniCanvas, miniNameEl) {
   let lastThumbMirrored = null;
   let thumbLoadSeq = 0;
 
-  return function renderThumbnail(state) {
+  return function renderThumbnail(state, effectiveCameraMirror = true) {
     const ref = state.activeReference;
     if (!ref) {
       lastThumbRef = null;
@@ -166,11 +168,14 @@ export function createThumbnailRenderer(miniCanvas, miniNameEl) {
     }
 
     miniNameEl.textContent = ref.name;
-    const mirrorRef = state.settings.mirrorRef;
-    if (ref === lastThumbRef && mirrorRef === lastThumbMirrored) return;
+    const mirrorMini = shouldMirrorReferencePreview(
+      state.settings.mirrorRef,
+      effectiveCameraMirror
+    );
+    if (ref === lastThumbRef && mirrorMini === lastThumbMirrored) return;
 
     lastThumbRef = ref;
-    lastThumbMirrored = mirrorRef;
+    lastThumbMirrored = mirrorMini;
     const seq = ++thumbLoadSeq;
 
     const img = new Image();
@@ -179,13 +184,13 @@ export function createThumbnailRenderer(miniCanvas, miniNameEl) {
       const { width: W, height: H } = miniCanvas;
       miniCtx.clearRect(0, 0, W, H);
       miniCtx.save();
-      if (mirrorRef) {
+      if (mirrorMini) {
         miniCtx.translate(W, 0);
         miniCtx.scale(-1, 1);
       }
       miniCtx.drawImage(img, 0, 0, W, H);
       miniCtx.restore();
-      const lms = mirrorRef ? getMirroredCopy(ref.landmarks) : ref.landmarks;
+      const lms = mirrorMini ? getMirroredCopy(ref.landmarks) : ref.landmarks;
       drawStaticSkeleton(miniCtx, W, H, lms);
     };
     img.onerror = () => {
