@@ -8,8 +8,8 @@ import {
   playShutterSound,
   speakRussianHint
 } from "../services/audioVoiceService.js";
-import { captureVideoFrame } from "../services/cameraService.js";
 import { detectPoseOnVideo } from "../services/mediapipeService.js";
+import { captureVideoFrameBlob } from "../services/shotMediaService.js";
 import { addCapturedShot, getState } from "../state/store.js";
 import { drawStageOverlay } from "./overlayRenderer.js";
 
@@ -24,6 +24,7 @@ export function createCameraFrameProcessor(cameraView) {
   let lastVideoTime = -1;
   let lastTimestamp = 0;
   let lastScore = 0;
+  let isCapturing = false;
 
   function clearOverlay() {
     const c = cameraView.overlayCanvas;
@@ -47,36 +48,52 @@ export function createCameraFrameProcessor(cameraView) {
   }
 
   /**
-   * Захватывает текущий кадр видео и сохраняет снимок в Store.
+   * Асинхронно захватывает текущий кадр видео в Blob + ObjectURL и сохраняет снимок в Store.
    * @param {number} score
    * @param {boolean} mirrorCamera
+   * @returns {Promise<boolean>}
    */
-  function takeShot(score, mirrorCamera) {
+  async function takeShot(score, mirrorCamera) {
     const st = getState();
-    if (!st.activeReference) return;
+    const activeRef = st.activeReference;
+    if (!activeRef || isCapturing) return false;
 
-    const dataUrl = captureVideoFrame(cameraView.video, mirrorCamera, "image/jpeg", 0.92);
-    if (!dataUrl) return;
+    isCapturing = true;
+    try {
+      const mirrorRef = st.settings.mirrorRef;
+      const refLms = mirrorRef
+        ? getMirroredCopy(activeRef.landmarks)
+        : cloneLandmarks(activeRef.landmarks);
+      const capturedUserLms = transformShotLandmarksForCapture(userLandmarks, mirrorCamera);
 
-    playShutterSound();
-    cameraView.triggerFlash();
-    const refLms = st.settings.mirrorRef
-      ? getMirroredCopy(st.activeReference.landmarks)
-      : cloneLandmarks(st.activeReference.landmarks);
+      const frame = await captureVideoFrameBlob(cameraView.video, mirrorCamera, "image/jpeg", 0.92);
+      if (!frame) return false;
 
-    addCapturedShot({
-      id: `shot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      referenceId: st.activeReference.id,
-      referenceName: st.activeReference.name,
-      referenceImageDataUrl: st.activeReference.imageDataUrl,
-      refMirrored: st.settings.mirrorRef,
-      cameraMirrored: mirrorCamera,
-      imageDataUrl: dataUrl,
-      score,
-      userLandmarks: transformShotLandmarksForCapture(userLandmarks, mirrorCamera),
-      refLandmarks: refLms,
-      createdAt: Date.now()
-    });
+      playShutterSound();
+      cameraView.triggerFlash();
+
+      addCapturedShot({
+        id: `shot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        referenceId: activeRef.id,
+        referenceName: activeRef.name,
+        referenceImageDataUrl: activeRef.imageDataUrl,
+        refMirrored: mirrorRef,
+        cameraMirrored: mirrorCamera,
+        imageBlob: frame.imageBlob,
+        imageUrl: frame.imageUrl,
+        ...(frame.imageDataUrl ? { imageDataUrl: frame.imageDataUrl } : {}),
+        score,
+        userLandmarks: capturedUserLms,
+        refLandmarks: refLms,
+        createdAt: Date.now()
+      });
+      return true;
+    } catch (err) {
+      console.warn("Failed to capture video frame:", err);
+      return false;
+    } finally {
+      isCapturing = false;
+    }
   }
 
   /**
@@ -143,7 +160,7 @@ export function createCameraFrameProcessor(cameraView) {
       st.runtime.shutterCooldownMs = shutterStep.cooldownMs;
 
       if (shutterStep.shouldShoot) {
-        takeShot(ev.totalScore, mirrorCamera);
+        void takeShot(ev.totalScore, mirrorCamera);
       }
 
       const above = ev.totalScore >= st.settings.threshold;

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  appendShotWithLruLimit,
   buildShotDownloadFilename,
   formatShotMetadata,
+  getShotImageSrc,
   removeShotAndResolveSelection,
   resolveSelectedShot,
   resolveShotReference,
@@ -10,6 +12,7 @@ import {
 import { createDefaultSkeleton } from "../src/core/poseMath.js";
 import {
   addCapturedShot,
+  clearShots,
   deleteShot,
   getState,
   navigateTo,
@@ -220,5 +223,25 @@ describe("store gallery actions", () => {
     expect(getState().shots).toEqual([]);
     expect(getState().selectedShotId).toBeNull();
     expect(deleteShot("missing")).toBe(false);
+  });
+
+  it("resolves imageUrl over imageDataUrl and enforces pure LRU limit", () => {
+    const blobShot = makeShot("b1", {
+      imageBlob: new Blob(["x"], { type: "image/jpeg" }),
+      imageUrl: "blob:shot-b1",
+      imageDataUrl: "data:image/jpeg;base64,FALLBACK"
+    });
+    const legacyShot = makeShot("l1", { imageUrl: undefined });
+    expect(getShotImageSrc(blobShot)).toBe("blob:shot-b1");
+    expect(getShotImageSrc(legacyShot)).toBe("data:image/jpeg;base64,SHOT");
+    expect(getShotImageSrc(null)).toBe("");
+
+    const s1 = makeShot("s1");
+    const s2 = makeShot("s2");
+    const s3 = makeShot("s3");
+    const step1 = appendShotWithLruLimit([s2, s1], s3, 2);
+    expect(step1.shots.map((s) => s.id)).toEqual(["s3", "s2"]);
+    expect(step1.evicted.map((s) => s.id)).toEqual(["s1"]);
+    expect(clearShots()).toBe(0);
   });
 });

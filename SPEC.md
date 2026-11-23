@@ -51,7 +51,9 @@
  * @property {string} [referenceImageDataUrl] - Data URL эталона на момент съемки (опционально)
  * @property {boolean} [refMirrored] - Состояние mirrorRef на момент съемки (опционально)
  * @property {boolean} [cameraMirrored] - Было ли применено зеркалирование камеры при захвате кадра (опционально)
- * @property {string} imageDataUrl - Чистый JPEG Data URL (без HUD и сетки, с учетом cameraMirrored)
+ * @property {Blob | null} [imageBlob] - Чистый JPEG Blob кадра в памяти (основное хранилище сессии)
+ * @property {string} [imageUrl] - Временный Object URL (`blob:...`), созданный из imageBlob (отзывается через URL.revokeObjectURL)
+ * @property {string} [imageDataUrl] - Опциональный fallback Data URL (обратная совместимость для сред без toBlob и моков)
  * @property {number} score - Итоговый процент совпадения (0..100)
  * @property {JointPoint[] | null} userLandmarks - Скелет пользователя в момент спуска
  * @property {JointPoint[] | null} refLandmarks - Эффективный скелет эталона (с учетом mirrorRef)
@@ -104,6 +106,7 @@
 - `POSE_RECORD_SECONDS = 3` (отсчет для записи эталонной позы с камеры).
 - `VOICE_COOLDOWN_MS = 3200` (минимальный интервал между голосовыми подсказками).
 - `JOINT_VISIBILITY_THRESHOLD = 0.35`.
+- `GALLERY_MAX_SHOTS = 30` (максимум кадров в ленте сессии, вытеснение старых по LRU).
 
 ## 4. Edge Cases (обязательная обработка)
 1. **MediaPipe GPU -> CPU fallback и ошибка CDN:** при сбое `delegate: "GPU"` автоматический повтор с `delegate: "CPU"`. При полном отказе — `mpStatus: "error"`, уведомление без падения приложения, ручная калибровка остается доступной.
@@ -114,4 +117,5 @@
 6. **Переполнение `localStorage`:** при сохранении калибровок перехват `QuotaExceededError` (и сжатие превью-изображения при загрузке фото), чтобы приложение не падало.
 7. **Ограничения Web Audio / SpeechSynthesis в браузерах:** разблокировка `AudioContext` только после первого пользовательского жеста; предотвращение наложения реплик через `VOICE_COOLDOWN_MS`.
 8. **Зеркалирование передней и задней камеры («Честная передняя камера»):** на задней камере (`facingMode === "environment"`) зеркалирование камеры никогда не применяется (превью и кадр прямые, тумблер в UI `disabled`), при этом пользовательское предпочтение `settings.mirrorFrontCamera` сохраняется при переключении «Передняя → Задняя → Передняя». При неопределённом `facingMode` (десктоп/вебкамера без `label` и явных маркеров задней камеры) камера детерминированно трактуется как передняя (управляемая `mirrorFrontCamera`) со строгой синхронизацией `<video>`, `<canvas>` и `takeShot`.
+9. **Память Галереи (`Blob` + `ObjectURL` + LRU):** кадры в `state.shots` хранятся как JPEG `Blob` + `ObjectURL` с ограничением ленты `GALLERY_MAX_SHOTS = 30` (самые старые вытесняются по LRU). При удалении кадра, вытеснении по LRU, полной очистке Галереи и выгрузке вкладки (`beforeunload`, `pagehide` без `persisted`) для `blob:`-URL гарантированно вызывается `URL.revokeObjectURL(...)` после отвязки от DOM. Скачивание JPG использует изолированный временный `ObjectURL`, чтобы не конфликтовать с отображением в ленте.
 

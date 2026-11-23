@@ -12,7 +12,7 @@ import { evaluatePose } from "../src/core/poseEvaluator.js";
 import { buildFullPose, createDefaultSkeleton } from "../src/core/poseMath.js";
 import { loadSettings, saveSettings } from "../src/services/storageService.js";
 import {
-  deleteShot,
+  clearShots,
   getState,
   navigateTo,
   updateRuntime,
@@ -243,24 +243,28 @@ describe("Front -> Rear -> Front preference preservation and takeShot capture fl
     vi.stubGlobal("requestAnimationFrame", vi.fn().mockReturnValue(1));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     scaleSpy = vi.fn();
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:mock-shot");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     vi.stubGlobal("document", {
       hidden: false,
       createElement: () => ({
         width: 0,
         height: 0,
         getContext: () => ({ translate: vi.fn(), scale: scaleSpy, drawImage: vi.fn() }),
-        toDataURL: () => "data:image/jpeg;base64,CAPTURED"
+        toBlob: (/** @type {(b: Blob) => void} */ cb) =>
+          cb(new Blob(["jpg"], { type: "image/jpeg" }))
       })
     });
     navigateTo("camera");
     updateSettings({ activeDeviceId: "", mirrorFrontCamera: true, mirrorRef: false });
     updateRuntime({ cameraReady: true, cameraError: null });
-    while (getState().shots.length > 0) deleteShot(getState().shots[0].id);
+    clearShots();
   });
 
   afterEach(() => {
-    while (getState().shots.length > 0) deleteShot(getState().shots[0].id);
+    clearShots();
     updateSettings({ activeDeviceId: "", mirrorFrontCamera: true, mirrorRef: false });
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -309,14 +313,14 @@ describe("Front -> Rear -> Front preference preservation and takeShot capture fl
     await vi.waitFor(() => expect(view.setCameraList).toHaveBeenCalledTimes(1));
     expect(view.setCameraMirrored).toHaveBeenLastCalledWith(true);
 
-    ctrl.takeManualShot();
+    await ctrl.takeManualShot();
     expect(scaleSpy).toHaveBeenCalledWith(-1, 1);
     expect(getState().shots[0].cameraMirrored).toBe(true);
 
     scaleSpy.mockClear();
     updateSettings({ mirrorFrontCamera: false });
     expect(startStream).toHaveBeenCalledTimes(1);
-    ctrl.takeManualShot();
+    await ctrl.takeManualShot();
     expect(scaleSpy).not.toHaveBeenCalled();
     expect(getState().shots[0].cameraMirrored).toBe(false);
 
@@ -324,7 +328,7 @@ describe("Front -> Rear -> Front preference preservation and takeShot capture fl
     expect(view.setCameraMirrored).toHaveBeenLastCalledWith(false);
     expect(getState().settings.mirrorFrontCamera).toBe(false);
     scaleSpy.mockClear();
-    ctrl.takeManualShot();
+    await ctrl.takeManualShot();
     expect(scaleSpy).not.toHaveBeenCalled();
     expect(getState().shots[0].cameraMirrored).toBe(false);
 

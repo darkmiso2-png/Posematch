@@ -296,14 +296,16 @@ export function createCameraController(cameraView, deps = {}) {
     resetCameraRuntime();
   }
 
-  function takeManualShot() {
+  async function takeManualShot() {
     if (!isVideoStreamReady()) return;
     const st = getState();
     st.runtime.holdMs = 0;
     st.runtime.shutterCooldownMs = SHUTTER_COOLDOWN_MS;
     const score = frameProcessor.getLastScore();
-    frameProcessor.takeShot(score, getEffectiveMirrorCamera());
-    cameraView.updateHud(score, "Снимок сохранён!", 0);
+    const saved = await frameProcessor.takeShot(score, getEffectiveMirrorCamera());
+    if (saved) {
+      cameraView.updateHud(score, "Снимок сохранён!", 0);
+    }
   }
 
   return {

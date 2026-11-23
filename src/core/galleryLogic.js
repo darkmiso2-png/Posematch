@@ -1,3 +1,4 @@
+import { GALLERY_MAX_SHOTS } from "./constants.js";
 import { clamp } from "./poseMath.js";
 
 /** @type {Record<string, string>} */
@@ -72,11 +73,48 @@ export function resolveSelectedShot(shots, selectedShotId) {
 }
 
 /**
+ * Возвращает URL изображения кадра с приоритетом ObjectURL и обратной совместимостью с Data URL.
+ * @param {import("./types.js").CapturedShot | null | undefined} shot
+ * @returns {string}
+ */
+export function getShotImageSrc(shot) {
+  if (!shot) return "";
+  if (typeof shot.imageUrl === "string" && shot.imageUrl) return shot.imageUrl;
+  if (typeof shot.imageDataUrl === "string" && shot.imageDataUrl) return shot.imageDataUrl;
+  return "";
+}
+
+/**
+ * Добавляет новый кадр в начало ленты с соблюдением LRU-лимита (вытесняет самые старые).
+ * @param {import("./types.js").CapturedShot[]} shots
+ * @param {import("./types.js").CapturedShot} newShot
+ * @param {number} [maxShots]
+ * @returns {{ shots: import("./types.js").CapturedShot[], evicted: import("./types.js").CapturedShot[] }}
+ */
+export function appendShotWithLruLimit(shots, newShot, maxShots = GALLERY_MAX_SHOTS) {
+  const limit = Number.isFinite(maxShots) ? Math.max(1, Math.floor(maxShots)) : GALLERY_MAX_SHOTS;
+  const list = Array.isArray(shots) ? shots.filter((item) => item.id !== newShot.id) : [];
+  const next = [newShot, ...list];
+  if (next.length <= limit) {
+    return { shots: next, evicted: [] };
+  }
+  return {
+    shots: next.slice(0, limit),
+    evicted: next.slice(limit)
+  };
+}
+
+/**
  * Удаление снимка и предсказуемый выбор соседнего валидного дубля.
  * @param {import("./types.js").CapturedShot[]} shots
  * @param {string} targetId
  * @param {string | null} currentSelectedId
- * @returns {{ shots: import("./types.js").CapturedShot[], selectedShotId: string | null, removed: boolean }}
+ * @returns {{
+ *   shots: import("./types.js").CapturedShot[],
+ *   selectedShotId: string | null,
+ *   removed: boolean,
+ *   removedShot: import("./types.js").CapturedShot | null
+ * }}
  */
 export function removeShotAndResolveSelection(shots, targetId, currentSelectedId) {
   const removeIdx = shots.findIndex((shot) => shot.id === targetId);
@@ -85,19 +123,21 @@ export function removeShotAndResolveSelection(shots, targetId, currentSelectedId
     return {
       shots,
       selectedShotId: resolved ? resolved.id : null,
-      removed: false
+      removed: false,
+      removedShot: null
     };
   }
 
+  const removedShot = shots[removeIdx];
   const nextShots = shots.filter((shot) => shot.id !== targetId);
   if (nextShots.length === 0) {
-    return { shots: [], selectedShotId: null, removed: true };
+    return { shots: [], selectedShotId: null, removed: true, removedShot };
   }
 
   if (currentSelectedId && currentSelectedId !== targetId) {
     const preserved = nextShots.find((shot) => shot.id === currentSelectedId);
     if (preserved) {
-      return { shots: nextShots, selectedShotId: preserved.id, removed: true };
+      return { shots: nextShots, selectedShotId: preserved.id, removed: true, removedShot };
     }
   }
 
@@ -105,7 +145,8 @@ export function removeShotAndResolveSelection(shots, targetId, currentSelectedId
   return {
     shots: nextShots,
     selectedShotId: nextShots[fallbackIdx].id,
-    removed: true
+    removed: true,
+    removedShot
   };
 }
 

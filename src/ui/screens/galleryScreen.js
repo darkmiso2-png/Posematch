@@ -1,16 +1,14 @@
 import {
   buildShotDownloadFilename,
   formatShotMetadata,
+  getShotImageSrc,
   resolveSelectedShot,
   resolveShotReference
 } from "../../core/galleryLogic.js";
+import { createShotDownloadUrl } from "../../services/shotMediaService.js";
 import { deleteShot, navigateTo, selectShot, setShowSkeletonOverlay } from "../../state/store.js";
 import { createScreenNotice } from "../screenNotice.js";
-import {
-  createGalleryPaneRenderer,
-  dataUrlToBlob,
-  mountGalleryEmptyState
-} from "./galleryViewHelpers.js";
+import { createGalleryPaneRenderer, mountGalleryEmptyState } from "./galleryViewHelpers.js";
 
 const PANE_WIDTH = 360;
 const PANE_HEIGHT = 480;
@@ -66,6 +64,7 @@ export function createGalleryScreen(root) {
     }
   }
   window.addEventListener("pagehide", revokeActiveDownloadUrl);
+  window.addEventListener("beforeunload", revokeActiveDownloadUrl);
 
   const { show: showNotice, clear: clearNotice } = createScreenNotice(root, "gal", {
     defaultTone: "info",
@@ -94,31 +93,25 @@ export function createGalleryScreen(root) {
   });
 
   btnDownload.addEventListener("click", () => {
-    if (!currentShot || !currentShot.imageDataUrl) {
-      showNotice("Нет изображения для скачивания.", "error");
+    const downloadTarget = createShotDownloadUrl(currentShot);
+    if (!currentShot || !downloadTarget) {
+      showNotice("Нет корректного изображения для скачивания.", "error");
       return;
     }
 
     const filename = buildShotDownloadFilename(currentShot, currentRefName);
-    const blob = dataUrlToBlob(currentShot.imageDataUrl);
-    if (!blob && !currentShot.imageDataUrl.startsWith("data:image/")) {
-      showNotice("Некорректный формат изображения для скачивания.", "error");
-      return;
-    }
-
     revokeActiveDownloadUrl();
-    const objectUrl = blob ? URL.createObjectURL(blob) : "";
-    const href = objectUrl || currentShot.imageDataUrl;
+
     const link = document.createElement("a");
-    link.href = href;
+    link.href = downloadTarget.href;
     link.download = filename;
     link.rel = "noopener";
     document.body.appendChild(link);
     link.click();
     link.remove();
 
-    if (objectUrl) {
-      activeDownloadUrl = objectUrl;
+    if (downloadTarget.isObjectUrl) {
+      activeDownloadUrl = downloadTarget.href;
       downloadRevokeTimer = window.setTimeout(revokeActiveDownloadUrl, 60_000);
     }
     showNotice(`Файл ${filename} скачан`, "info");
@@ -143,7 +136,7 @@ export function createGalleryScreen(root) {
       }
 
       const img = document.createElement("img");
-      img.src = shot.imageDataUrl;
+      img.src = getShotImageSrc(shot);
       img.alt = `Снимок ${shot.score}%`;
       img.loading = "lazy";
 
@@ -182,8 +175,8 @@ export function createGalleryScreen(root) {
       emptyBox.hidden = false;
       btnDownload.disabled = true;
       btnDelete.disabled = true;
-      refCtx.clearRect(0, 0, refCanvas.width, refCanvas.height);
-      shotCtx.clearRect(0, 0, shotCanvas.width, shotCanvas.height);
+      drawPane("ref", refCanvas, refCtx, null, null, false, false, "#00e5ff");
+      drawPane("shot", shotCanvas, shotCtx, null, null, false, false, "#00e676");
       stripCountEl.textContent = "0";
       strip.replaceChildren();
       return;
@@ -225,7 +218,7 @@ export function createGalleryScreen(root) {
       "shot",
       shotCanvas,
       shotCtx,
-      currentShot.imageDataUrl,
+      getShotImageSrc(currentShot),
       currentShot.userLandmarks,
       false,
       state.showSkeletonOverlay,

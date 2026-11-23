@@ -1,39 +1,6 @@
 import { drawStaticSkeleton } from "../overlayRenderer.js";
 
 /**
- * Конвертация Data URL в Blob для надежного скачивания на мобильных браузерах.
- * @param {string} dataUrl
- * @returns {Blob | null}
- */
-export function dataUrlToBlob(dataUrl) {
-  const commaIdx = dataUrl.indexOf(",");
-  if (!dataUrl.startsWith("data:") || commaIdx < 0) return null;
-  const header = dataUrl.slice(5, commaIdx);
-  const payload = dataUrl.slice(commaIdx + 1);
-  if (!payload) return null;
-
-  const mime = header.split(";")[0] || "image/jpeg";
-  if (!header.includes(";base64")) {
-    try {
-      return new Blob([decodeURIComponent(payload)], { type: mime });
-    } catch {
-      return null;
-    }
-  }
-
-  try {
-    const bin = atob(payload);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i += 1) {
-      bytes[i] = bin.charCodeAt(i);
-    }
-    return new Blob([bytes], { type: mime });
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Отрисовка изображения и скелета с сохранением исходных пропорций внутри холста.
  * @param {HTMLCanvasElement} canvas
  * @param {CanvasRenderingContext2D} ctx

@@ -32,7 +32,9 @@
  * @property {string} [referenceImageDataUrl] - Data URL эталона на момент съемки
  * @property {boolean} [refMirrored] - Был ли включен mirrorRef на момент съемки
  * @property {boolean} [cameraMirrored] - Было ли применено зеркалирование камеры в момент съемки
- * @property {string} imageDataUrl - Чистый JPEG Data URL (с учетом cameraMirrored)
+ * @property {Blob | null} [imageBlob] - Чистый JPEG Blob кадра (с учетом cameraMirrored)
+ * @property {string} [imageUrl] - Object URL (`blob:...`), созданный из imageBlob
+ * @property {string} [imageDataUrl] - Fallback JPEG Data URL (обратная совместимость для сред без toBlob и тестов)
  * @property {number} score - Итоговый процент совпадения (0..100)
  * @property {JointPoint[] | null} userLandmarks - Скелет пользователя в момент спуска
  * @property {JointPoint[] | null} refLandmarks - Эффективный скелет эталона

@@ -1,5 +1,10 @@
 import { validateCalibrationSkeleton } from "../core/calibrationLogic.js";
-import { removeShotAndResolveSelection, resolveSelectedShot } from "../core/galleryLogic.js";
+import {
+  appendShotWithLruLimit,
+  removeShotAndResolveSelection,
+  resolveSelectedShot
+} from "../core/galleryLogic.js";
+import { revokeShotObjectUrl, revokeShotsObjectUrls } from "../services/shotMediaService.js";
 import {
   saveCalibrationsList,
   saveLastActiveReferenceId,
@@ -239,13 +244,16 @@ export function resetCameraRuntime() {
 }
 
 /**
+ * Добавляет снимок в ленту с соблюдением LRU-лимита и освобождением ObjectURL вытесненных кадров.
  * @param {import("../core/types.js").CapturedShot} shot
  * @returns {void}
  */
 export function addCapturedShot(shot) {
-  state.shots = [shot, ...state.shots];
+  const { shots, evicted } = appendShotWithLruLimit(state.shots, shot);
+  state.shots = shots;
   state.selectedShotId = shot.id;
   notify();
+  revokeShotsObjectUrls(evicted);
 }
 
 /**
@@ -259,7 +267,7 @@ export function selectShot(shotId) {
 }
 
 /**
- * Удаление дубля из ленты сессии с переключением на соседний валидный снимок.
+ * Удаление дубля из ленты сессии с освобождением ObjectURL и выбором соседнего снимка.
  * @param {string} shotId
  * @returns {boolean} true, если снимок был найден и удален
  */
@@ -269,7 +277,25 @@ export function deleteShot(shotId) {
   state.shots = res.shots;
   state.selectedShotId = res.selectedShotId;
   notify();
+  revokeShotObjectUrl(res.removedShot);
   return true;
+}
+
+/**
+ * Полная очистка всех снимков сессии с освобождением всех связанных ObjectURL.
+ * @returns {number} количество удаленных кадров
+ */
+export function clearShots() {
+  if (state.shots.length === 0) {
+    state.selectedShotId = null;
+    return 0;
+  }
+  const removed = state.shots;
+  state.shots = [];
+  state.selectedShotId = null;
+  notify();
+  revokeShotsObjectUrls(removed);
+  return removed.length;
 }
 
 /**

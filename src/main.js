@@ -1,7 +1,7 @@
 import { installAudioUnlockListener } from "./services/audioVoiceService.js";
 import { initPoseLandmarker } from "./services/mediapipeService.js";
 import { registerPwaServiceWorker } from "./services/pwaService.js";
-import { getState, subscribe, updateRuntime } from "./state/store.js";
+import { clearShots, getState, subscribe, updateRuntime } from "./state/store.js";
 import { createCameraController } from "./ui/cameraController.js";
 import { createScreenRouter } from "./ui/router.js";
 import { createCalibrationScreen } from "./ui/screens/calibrationScreen.js";
@@ -80,8 +80,16 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-window.addEventListener("pagehide", () => {
+window.addEventListener("pagehide", (event) => {
   camController?.deactivate();
+  if (!event.persisted) {
+    clearShots();
+  }
+});
+
+window.addEventListener("beforeunload", () => {
+  camController?.deactivate();
+  clearShots();
 });
 
 initPoseLandmarker((mpStatus, mpMessage) => updateRuntime({ mpStatus, mpMessage }));

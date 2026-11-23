@@ -17,6 +17,7 @@ export const POSE_RECORD_SECONDS = 3;
 export const VOICE_COOLDOWN_MS = 3200;
 export const JOINT_VISIBILITY_THRESHOLD = 0.35;
 export const TOTAL_LANDMARKS = 33;
+export const GALLERY_MAX_SHOTS = 30;
 
 /** @type {readonly number[]} */
 export const EDITABLE_JOINTS = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];

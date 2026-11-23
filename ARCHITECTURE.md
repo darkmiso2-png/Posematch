@@ -32,13 +32,14 @@
 - `src/core/cameraHudLogic.js` — чистая логика Экрана 3: автозатвор 800 ms, SVG-кольцо, отсчет 3-2-1, классификатор ошибок камеры, определение направления по deviceId/label и стартовый эталон.
 - `src/core/cameraMirrorLogic.js` — чистая логика «Честной передней камеры»: разрешение эффективного зеркалирования (Передняя / Задняя / вебкамера без label), тексты тумблера, XOR-синхронизация миниатюры и трансформация скелета для захвата кадра.
 - `src/core/cameraSwitchLogic.js` — чистая логика переключения камер «Передняя / Задняя»: выбор целевого устройства, фолбэк при пустых label и тексты доступности/ошибок.
-- `src/core/galleryLogic.js` — чистая логика Экрана 4: выбор/удаление дублей, разрешение эталона снимка, санитизация имени JPG и форматирование метаданных.
+- `src/core/galleryLogic.js` — чистая логика Экрана 4: выбор/удаление дублей, LRU-лимит (`appendShotWithLruLimit`), разрешение `getShotImageSrc`/эталона, санитизация имени JPG и форматирование метаданных.
 - `src/core/poseMath.js` — чистая математика углов, координат, отзеркаливания, обратного маппинга padded-холста и базовых скелетов.
 - `src/core/poseEvaluator.js` — оценка совпадения позы по углам сегментов и генерация подсказок.
 - `src/core/poseAlignment.js` — расчет целевого скелета на экране (режим «К телу» и сглаживание).
 - `src/core/presetData.js` — данные и позы встроенных пресетов с категориями фильтрации.
 - `src/core/pwaLogic.js` — чистая логика PWA: классификация запросов SW, фильтрация устаревших кэшей и проверка условий регистрации.
 - `src/services/pwaService.js` — безопасная неблокирующая регистрация `./sw.js` после загрузки страницы.
+- `src/services/shotMediaService.js` — захват чистого кадра видео в JPEG `Blob` + `ObjectURL` (`canvas.toBlob`), изолированный URL скачивания и безопасное освобождение `URL.revokeObjectURL`.
 - `src/services/mediapipeService.js` — загрузка и вызов MediaPipe PoseLandmarker (VIDEO Lite 0.5 и 3-шаговый каскад Lite 0.2 -> Heavy 0.2 -> Heavy + padded canvas для фото).
 - `src/services/cameraService.js` — доступ к камерам, пауза освобождения сенсора, `facingMode`-fallback, переключение устройств и захват чистого JPEG кадра.
 - `src/services/audioVoiceService.js` — защита `activeUtterance` от GC, синхронный жест-прайминг фразой `"Голос включён"`, приоритет `ru-RU`, очередь `busy`/4с-сброс, watchdog 1500 мс и Web Audio fallback.
@@ -62,14 +63,15 @@
 - `src/ui/screens/cameraControls.js` — Экран 3: панель переключателей 2x2, тумблер «Честная передняя камера», слайдер порога и обработчик отсутствия русского TTS.
 - `src/ui/screens/cameraViewHelpers.js` — Экран 3: идемпотентный маунтинг SVG-кольца автозатвора/оверлеев, рендер синхронной миниатюры «Эталон», списка камер и HUD.
 - `src/ui/screens/galleryScreen.js` — Экран 4: сравнение Side-by-Side, тумблер скелета, метаданные, лента дублей, Empty State и скачивание JPG.
-- `src/ui/screens/galleryViewHelpers.js` — Экран 4: декодирование Blob, рендер панелей Side-by-Side с кэшированием и маунтинг Empty State.
+- `src/ui/screens/galleryViewHelpers.js` — Экран 4: рендер панелей Side-by-Side с кэшированием и маунтинг Empty State.
 - `tests/poseMath.test.js` — юнит-тесты на математику углов, отзеркаливание, выравнивание и Edge Cases.
 - `tests/hubFeature.test.js` — юнит-тесты валидации имени калибровок, квоты `localStorage` и экшенов Store.
 - `tests/calibrationFeature.test.js` — юнит-тесты логики калибровки, жестов, валидации скелета и сохранения/отмены в Store.
 - `tests/cameraFeature.test.js` — юнит-тесты автозатвора 800 ms, отсчета 3-2-1, классификатора ошибок камеры и Camera-First Store.
 - `tests/cameraMirrorFeature.test.js` — юнит-тесты «Честной передней камеры»: передняя/задняя/вебкамера без label, сохранение предпочтения при переключении, синхронность X-координат/миниатюры/подсказок и флаг захвата `takeShot`.
 - `tests/cameraSwitchFeature.test.js` — юнит-тесты переключения камер «Передняя / Задняя», защиты от двойного клика, синхронизации `<select>`, fallback по `facingMode` и снятия блокировки/оверлея при ошибке.
-- `tests/galleryFeature.test.js` — юнит-тесты санитизации имени JPG, выбора/удаления дублей, разрешения эталона и экшенов Галереи в Store.
+- `tests/galleryFeature.test.js` — юнит-тесты санитизации имени JPG, выбора/удаления дублей, разрешения эталона, LRU-логики и экшенов Галереи в Store.
+- `tests/galleryMemoryFeature.test.js` — юнит-тесты `shotMediaService` (`toBlob` + `ObjectURL`), вытеснения по LRU (`GALLERY_MAX_SHOTS = 30`), отзыва `ObjectURL` на удалении/очистке и рендера/скачивания в `galleryScreen`.
 - `tests/router.test.js` — юнит-тесты `createScreenRouter`, переходов `onEnter`/`onLeave` и защиты от реентрантного вызова.
 - `tests/pwaFeature.test.js` — юнит-тесты стратегий SW, фильтрации кэшей, валидности `manifest.webmanifest` и PNG-сигнатур/размеров иконок.
 - `tests/mobileHotfix.test.js` — юнит-тесты мобильного хотфикса BUG-M2: освобождение сенсора, пауза 150 мс и `facingMode`-fallback в `cameraService`.
