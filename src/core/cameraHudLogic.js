@@ -282,6 +282,6 @@ export function inferFacingModeFromDevice(deviceId = "", deviceLabel = "") {
   const combined = `${deviceLabel} ${deviceId}`.trim();
   if (!combined) return null;
   if (/(?:^|[^a-zа-яё])(back|rear|environment|тыл|задн)/i.test(combined)) return "environment";
-  if (/(?:^|[^a-zа-яё])(front|user|фронт)/i.test(combined)) return "user";
+  if (/(?:^|[^a-zа-яё])(front|user|фронт|передн)/i.test(combined)) return "user";
   return null;
 }

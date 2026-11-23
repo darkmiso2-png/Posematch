@@ -112,9 +112,15 @@ function createAbortedResult() {
  * @param {HTMLVideoElement} videoEl
  * @param {string} [deviceId]
  * @param {() => void} [onTrackEnded]
+ * @param {"user" | "environment" | ""} [preferredFacingMode]
  * @returns {Promise<StartCameraResult>}
  */
-export async function startCameraStream(videoEl, deviceId = "", onTrackEnded) {
+export async function startCameraStream(
+  videoEl,
+  deviceId = "",
+  onTrackEnded,
+  preferredFacingMode = ""
+) {
   stopCameraStream(videoEl);
   const reqId = ++streamRequestId;
 
@@ -146,7 +152,11 @@ export async function startCameraStream(videoEl, deviceId = "", onTrackEnded) {
     try {
       const primary = deviceId
         ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" };
+        : {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: preferredFacingMode ? { ideal: preferredFacingMode } : "user"
+          };
       stream = await requestStream(primary);
     } catch (firstErr) {
       if (reqId !== streamRequestId) return createAbortedResult();
@@ -160,7 +170,8 @@ export async function startCameraStream(videoEl, deviceId = "", onTrackEnded) {
       if (deviceId && (isReadableErr || isConstraintErr)) {
         const label = await resolveDeviceLabel(deviceId);
         if (reqId !== streamRequestId) return createAbortedResult();
-        const inferredFacing = inferFacingModeFromDevice(deviceId, label);
+        const inferredFacing =
+          inferFacingModeFromDevice(deviceId, label) || preferredFacingMode || null;
         if (inferredFacing) {
           stream = await requestStream({
             width: { ideal: 1280 },
@@ -176,6 +187,8 @@ export async function startCameraStream(videoEl, deviceId = "", onTrackEnded) {
         } else {
           throw firstErr;
         }
+      } else if (!deviceId && preferredFacingMode && isConstraintErr) {
+        stream = await requestStream({ width: { ideal: 1280 }, height: { ideal: 720 } });
       } else {
         throw firstErr;
       }

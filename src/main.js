@@ -24,7 +24,8 @@ const screens = {
 let camController = null;
 
 const cameraView = createCameraScreen(screens.camera, {
-  onSelectCamera: (id) => camController?.connectCamera(id),
+  onSelectCamera: (id) => camController?.selectCamera(id),
+  onSwitchCamera: () => camController?.switchCamera(),
   onRetryCamera: () => camController?.connectCamera(""),
   onManualShutter: () => camController?.takeManualShot(),
   onRecordPose: () => camController?.recordPose3Sec(),

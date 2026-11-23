@@ -1,4 +1,5 @@
 import { computeShutterRingProgress } from "../../core/cameraHudLogic.js";
+import { formatCameraOptionLabel, getSwitchCameraCopy } from "../../core/cameraSwitchLogic.js";
 import { AUTO_SHUTTER_HOLD_MS } from "../../core/constants.js";
 import { getMirroredCopy } from "../../core/poseMath.js";
 import {
@@ -18,6 +19,7 @@ const SHUTTER_RING_RADIUS = 28;
  * @param {HTMLElement} root
  * @param {{
  *   onSelectCamera: (id: string) => void,
+ *   onSwitchCamera: () => void,
  *   onRetryCamera: () => void,
  *   onManualShutter: () => void,
  *   onRecordPose: () => void,
@@ -57,6 +59,7 @@ export function createCameraScreen(root, actions) {
     /** @type {unknown} */ (root.querySelector("#shutter-ring-progress"))
   );
   const btnRecord = /** @type {HTMLButtonElement} */ (root.querySelector("#btn-record-pose"));
+  const btnSwitchCam = /** @type {HTMLButtonElement} */ (root.querySelector("#btn-switch-camera"));
   const btnCalib = /** @type {HTMLButtonElement} */ (root.querySelector("#cam-btn-calib"));
   const btnAttach = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-attach"));
   const btnMirror = /** @type {HTMLButtonElement} */ (root.querySelector("#toggle-mirror"));
@@ -75,6 +78,22 @@ export function createCameraScreen(root, actions) {
   /** @type {import("../../core/cameraHudLogic.js").CameraErrorInfo | null} */
   let cameraErrorInfo = null;
   let missingRuVoiceNotified = false;
+  let hasCameras = false;
+  let canSwitchCamera = false;
+  let isSwitchingCamera = false;
+  let activeFacingMode = "user";
+
+  function syncSwitchControl() {
+    const r = getState().runtime;
+    const copy = getSwitchCameraCopy(activeFacingMode, canSwitchCamera, isSwitchingCamera);
+    btnSwitchCam.hidden = !canSwitchCamera;
+    btnSwitchCam.disabled = !canSwitchCamera || isSwitchingCamera || r.isRecordingPose;
+    btnSwitchCam.classList.toggle("is-switching", isSwitchingCamera);
+    btnSwitchCam.setAttribute("aria-label", copy.ariaLabel);
+    btnSwitchCam.title = copy.title;
+    camSelect.disabled = !hasCameras || isSwitchingCamera || r.isRecordingPose;
+  }
+  syncSwitchControl();
 
   /**
    * @param {string} text
@@ -180,6 +199,9 @@ export function createCameraScreen(root, actions) {
     actions.onCancelRecordPose();
   });
   camSelect.addEventListener("change", () => actions.onSelectCamera(camSelect.value));
+  btnSwitchCam.addEventListener("click", () => {
+    if (!btnSwitchCam.disabled) actions.onSwitchCamera();
+  });
   slider.addEventListener("input", () => updateSettings({ threshold: Number(slider.value) }));
 
   btnAttach.addEventListener("click", () => {
@@ -212,25 +234,42 @@ export function createCameraScreen(root, actions) {
   /**
    * @param {MediaDeviceInfo[]} cams
    * @param {string} activeId
+   * @param {string} [facingMode]
    */
-  function setCameraList(cams, activeId) {
+  function setCameraList(cams, activeId, facingMode = "") {
+    hasCameras = cams.length > 0;
+    canSwitchCamera = cams.length >= 2;
+    if (facingMode === "user" || facingMode === "environment") {
+      activeFacingMode = facingMode;
+    }
     if (cams.length === 0) {
       const opt = document.createElement("option");
       opt.value = "";
       opt.textContent = "Камеры не найдены";
       camSelect.replaceChildren(opt);
-      camSelect.disabled = true;
-      return;
+    } else {
+      const opts = cams.map((cam, i) => {
+        const opt = document.createElement("option");
+        opt.value = cam.deviceId;
+        opt.textContent = formatCameraOptionLabel(cam, i, activeId, activeFacingMode);
+        opt.selected = cam.deviceId === activeId;
+        return opt;
+      });
+      camSelect.replaceChildren(...opts);
+      if (activeId) camSelect.value = activeId;
     }
-    const opts = cams.map((cam, i) => {
-      const opt = document.createElement("option");
-      opt.value = cam.deviceId;
-      opt.textContent = cam.label || `Камера ${i + 1}`;
-      opt.selected = cam.deviceId === activeId;
-      return opt;
-    });
-    camSelect.replaceChildren(...opts);
-    camSelect.disabled = false;
+    syncSwitchControl();
+  }
+
+  /** @param {{ canSwitch?: boolean, currentFacing?: string, isSwitching: boolean }} next */
+  function setCameraSwitchState(next) {
+    if (typeof next.canSwitch === "boolean") canSwitchCamera = next.canSwitch;
+    if (next.currentFacing === "user" || next.currentFacing === "environment") {
+      activeFacingMode = next.currentFacing;
+    }
+    isSwitchingCamera = next.isSwitching;
+    viewportBox?.classList.toggle("is-switching-camera", isSwitchingCamera);
+    syncSwitchControl();
   }
 
   /** @param {import("../../core/cameraHudLogic.js").CameraErrorInfo | null} info */
@@ -274,6 +313,7 @@ export function createCameraScreen(root, actions) {
     btnShutter.disabled = !streamReady || r.isRecordingPose || !state.activeReference;
     btnRecord.disabled = !streamReady || r.isRecordingPose;
     btnCalib.disabled = !state.activeReference || r.isRecordingPose;
+    syncSwitchControl();
 
     const hasCameraError = Boolean(r.cameraError);
     camFallback.hidden = !hasCameraError;
@@ -295,6 +335,7 @@ export function createCameraScreen(root, actions) {
     overlayCanvas,
     render,
     setCameraList,
+    setCameraSwitchState,
     setCameraMirrored,
     setCameraErrorInfo,
     showNotice,

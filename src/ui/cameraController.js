@@ -1,4 +1,9 @@
-import { shouldMirrorCamera } from "../core/cameraHudLogic.js";
+import { inferFacingModeFromDevice, shouldMirrorCamera } from "../core/cameraHudLogic.js";
+import {
+  formatCameraSwitchError,
+  resolveDeviceFacing,
+  resolveNextCameraTarget
+} from "../core/cameraSwitchLogic.js";
 import { SHUTTER_COOLDOWN_MS } from "../core/constants.js";
 import { cancelSpeech } from "../services/audioVoiceService.js";
 import {
@@ -13,13 +18,28 @@ import { createPoseRecorder } from "./cameraPoseRecorder.js";
 /**
  * Контроллер видеопотока, жизненного цикла камеры и координации записи позы 3 сек.
  * @param {ReturnType<import("./screens/cameraScreen.js").createCameraScreen>} cameraView
+ * @param {{
+ *   listDevices?: typeof listVideoDevices,
+ *   startStream?: typeof startCameraStream,
+ *   stopStream?: typeof stopCameraStream
+ * }} [deps]
  */
-export function createCameraController(cameraView) {
+export function createCameraController(cameraView, deps = {}) {
+  const listDevices = deps.listDevices || listVideoDevices;
+  const startStream = deps.startStream || startCameraStream;
+  const stopStream = deps.stopStream || stopCameraStream;
+
   const frameProcessor = createCameraFrameProcessor(cameraView);
   let lastFrameTime = performance.now();
   let isActive = false;
   let rafId = 0;
   let mirrorCamera = true;
+  /** @type {"user" | "environment" | ""} */
+  let activeFacingMode = "";
+  let isSwitchingCamera = false;
+  let sessionToken = 0;
+  /** @type {MediaDeviceInfo[]} */
+  let cachedDevices = [];
 
   /** @type {Promise<void> | null} */
   let connectPromise = null;
@@ -30,6 +50,7 @@ export function createCameraController(cameraView) {
     const st = getState();
     return Boolean(
       isActive &&
+      !isSwitchingCamera &&
       st.currentScreen === "camera" &&
       st.runtime.cameraReady &&
       !st.runtime.cameraError &&
@@ -43,7 +64,7 @@ export function createCameraController(cameraView) {
     isStreamReady: isVideoStreamReady,
     isCameraMirrored: () => mirrorCamera,
     ensureConnect: () => {
-      if (!connectPromise && !getState().runtime.cameraError) {
+      if (!connectPromise && !isSwitchingCamera && !getState().runtime.cameraError) {
         connectCamera();
       }
     },
@@ -51,7 +72,7 @@ export function createCameraController(cameraView) {
   });
 
   function handleTrackEnded() {
-    if (!isActive || getState().currentScreen !== "camera") return;
+    if (!isActive || isSwitchingCamera || getState().currentScreen !== "camera") return;
     frameProcessor.clearDetectionState();
     if (typeof document !== "undefined" && document.hidden) {
       deactivate();
@@ -61,18 +82,29 @@ export function createCameraController(cameraView) {
     void connectCamera();
   }
 
-  /** @param {string} [deviceId] */
-  function connectCamera(deviceId = getState().settings.activeDeviceId) {
+  /**
+   * @param {string} deviceId
+   * @param {"user" | "environment" | ""} preferredFacingMode
+   * @param {boolean} isSwitch
+   * @param {"user" | "environment" | ""} targetFacing
+   */
+  function runConnect(deviceId, preferredFacingMode, isSwitch, targetFacing) {
     if (!isActive || getState().currentScreen !== "camera") return Promise.resolve();
-    if (connectPromise && deviceId === connectingDeviceId) return connectPromise;
+    if (!isSwitch && connectPromise && deviceId === connectingDeviceId) return connectPromise;
     connectingDeviceId = deviceId;
+    const mySession = sessionToken;
 
     const task = (async () => {
       cameraView.setCameraErrorInfo(null);
-      const res = await startCameraStream(cameraView.video, deviceId, handleTrackEnded);
+      const res = await startStream(
+        cameraView.video,
+        deviceId,
+        handleTrackEnded,
+        preferredFacingMode
+      );
       if (res.aborted) return;
-      if (!isActive || getState().currentScreen !== "camera") {
-        stopCameraStream(cameraView.video);
+      if (!isActive || mySession !== sessionToken || getState().currentScreen !== "camera") {
+        stopStream(cameraView.video);
         return;
       }
 
@@ -80,19 +112,40 @@ export function createCameraController(cameraView) {
       updateRuntime({ cameraReady: res.ok, cameraError: res.error });
 
       if (res.ok) {
-        mirrorCamera = shouldMirrorCamera(res.facingMode, res.deviceLabel);
+        const inferred = inferFacingModeFromDevice(res.deviceId, res.deviceLabel);
+        const resolvedFacing =
+          res.facingMode === "user" || res.facingMode === "environment"
+            ? res.facingMode
+            : inferred || preferredFacingMode || (mirrorCamera ? "user" : "environment");
+        activeFacingMode = resolvedFacing;
+        mirrorCamera = shouldMirrorCamera(activeFacingMode, res.deviceLabel);
         cameraView.setCameraMirrored(mirrorCamera);
-        if (res.deviceId !== getState().settings.activeDeviceId) {
+
+        if (res.deviceId && res.deviceId !== getState().settings.activeDeviceId) {
           updateSettings({ activeDeviceId: res.deviceId });
         }
-        const cams = await listVideoDevices();
-        if (isActive && getState().currentScreen === "camera") {
-          cameraView.setCameraList(cams, getState().settings.activeDeviceId);
+
+        const cams = await listDevices().catch(() => cachedDevices);
+        if (!isActive || mySession !== sessionToken || getState().currentScreen !== "camera") {
+          return;
         }
+        cachedDevices = cams;
+        cameraView.setCameraList(cams, getState().settings.activeDeviceId, activeFacingMode);
+        cameraView.setCameraSwitchState({
+          canSwitch: cams.length >= 2,
+          currentFacing: activeFacingMode || "user",
+          isSwitching: isSwitchingCamera
+        });
       } else {
         recorder.clearPending();
         frameProcessor.clearDetectionState();
         cameraView.updateHud(0, "Камера не активна", 0);
+        if (isSwitch) {
+          cameraView.showNotice(
+            formatCameraSwitchError(targetFacing || preferredFacingMode || "user", res.error),
+            "error"
+          );
+        }
       }
     })().finally(() => {
       if (connectPromise === task) {
@@ -105,6 +158,83 @@ export function createCameraController(cameraView) {
     return task;
   }
 
+  /** @param {string} [deviceId] */
+  function connectCamera(deviceId = getState().settings.activeDeviceId) {
+    return runConnect(deviceId, "", false, "");
+  }
+
+  /** @param {string} deviceId */
+  async function selectCamera(deviceId) {
+    if (!isActive || getState().currentScreen !== "camera") return;
+    if (isSwitchingCamera) {
+      cameraView.setCameraList(cachedDevices, getState().settings.activeDeviceId, activeFacingMode);
+      return;
+    }
+
+    const mySession = sessionToken;
+    const selectedDev = cachedDevices.find((d) => d.deviceId === deviceId);
+    const preferredFacing = resolveDeviceFacing(selectedDev, "", "") || "";
+    const targetFacing =
+      preferredFacing || (activeFacingMode === "environment" ? "user" : "environment");
+
+    isSwitchingCamera = true;
+    cameraView.setCameraSwitchState({ isSwitching: true });
+    cameraView.clearNotice();
+    frameProcessor.clearDetectionState();
+    cameraView.updateHud(0, "Переключение камеры...", 0);
+
+    try {
+      await runConnect(deviceId, preferredFacing, true, targetFacing);
+    } finally {
+      if (mySession === sessionToken) {
+        isSwitchingCamera = false;
+        cameraView.setCameraSwitchState({
+          canSwitch: cachedDevices.length >= 2,
+          currentFacing: activeFacingMode || "user",
+          isSwitching: false
+        });
+      }
+    }
+  }
+
+  async function switchCamera() {
+    if (!isActive || isSwitchingCamera || getState().currentScreen !== "camera") return;
+    const mySession = sessionToken;
+    isSwitchingCamera = true;
+    cameraView.setCameraSwitchState({ isSwitching: true });
+
+    try {
+      if (cachedDevices.length < 2) {
+        const fresh = await listDevices().catch(() => cachedDevices);
+        if (!isActive || mySession !== sessionToken || getState().currentScreen !== "camera") {
+          return;
+        }
+        cachedDevices = fresh;
+      }
+
+      const target = resolveNextCameraTarget(
+        cachedDevices,
+        getState().settings.activeDeviceId,
+        activeFacingMode
+      );
+      if (!target) return;
+
+      cameraView.clearNotice();
+      frameProcessor.clearDetectionState();
+      cameraView.updateHud(0, "Переключение камеры...", 0);
+      await runConnect(target.deviceId, target.targetFacing, true, target.targetFacing);
+    } finally {
+      if (mySession === sessionToken) {
+        isSwitchingCamera = false;
+        cameraView.setCameraSwitchState({
+          canSwitch: cachedDevices.length >= 2,
+          currentFacing: activeFacingMode || "user",
+          isSwitching: false
+        });
+      }
+    }
+  }
+
   /** @param {number} now */
   function tick(now) {
     if (!isActive) return;
@@ -113,7 +243,7 @@ export function createCameraController(cameraView) {
     lastFrameTime = now;
     const st = getState();
 
-    if (st.currentScreen === "camera") {
+    if (st.currentScreen === "camera" && !isSwitchingCamera) {
       recorder.step(dt);
       if (!isActive) return;
       frameProcessor.processFrame(dt, now, isVideoStreamReady(), mirrorCamera);
@@ -127,6 +257,9 @@ export function createCameraController(cameraView) {
   function activate() {
     if (isActive) return;
     isActive = true;
+    sessionToken += 1;
+    isSwitchingCamera = false;
+    cameraView.setCameraSwitchState({ isSwitching: false });
     frameProcessor.resetForSession();
     lastFrameTime = performance.now();
     cameraView.updateHud(0, "Встаньте в кадр", 0);
@@ -137,13 +270,16 @@ export function createCameraController(cameraView) {
   function deactivate() {
     if (!isActive) return;
     isActive = false;
+    sessionToken += 1;
+    isSwitchingCamera = false;
+    cameraView.setCameraSwitchState({ isSwitching: false });
     if (rafId) {
       cancelAnimationFrame(rafId);
       rafId = 0;
     }
     recorder.cancel();
     cancelSpeech();
-    stopCameraStream(cameraView.video);
+    stopStream(cameraView.video);
     frameProcessor.resetForSession();
     frameProcessor.clearOverlay();
     cameraView.updateHud(0, "Камера на паузе", 0);
@@ -164,6 +300,8 @@ export function createCameraController(cameraView) {
     activate,
     deactivate,
     connectCamera,
+    selectCamera,
+    switchCamera,
     takeManualShot,
     recordPose3Sec: () => recorder.request(),
     cancelRecordPose: () => recorder.cancel(),
